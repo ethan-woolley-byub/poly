@@ -31,14 +31,14 @@
                   @dragleave="dragOverLang = null"
                   @drop="onDrop(lang.language)"
                 >
-                  <div
-                    class="lang-name"
-                    draggable="true"
-                    @dragstart="onDragStart(lang.language)"
-                    @dragend="onDragEnd"
-                    @touchstart.prevent="onLangTouchStart($event, lang.language)"
-                  >
-                    <span>{{ lang.name }}</span>
+                  <div class="lang-name">
+                    <span
+                      class="lang-name-text"
+                      draggable="true"
+                      @dragstart="onDragStart(lang.language)"
+                      @dragend="onDragEnd"
+                      @touchstart.prevent="onLangTouchStart($event, lang.language)"
+                    >{{ lang.name }}</span>
                     <span class="lang-actions">
                       <button
                         v-if="savedSource?.code !== lang.language"
@@ -399,7 +399,7 @@ function onLangTouchStart(e: TouchEvent, code: string) {
   if (target) {
     dragGhost = document.createElement('div')
     dragGhost.className = 'drag-ghost'
-    dragGhost.textContent = target.querySelector('.lang-name span')?.textContent ?? code
+    dragGhost.textContent = target.querySelector('.lang-name-text')?.textContent ?? code
     dragGhost.style.left = `${touch.clientX}px`
     dragGhost.style.top = `${touch.clientY}px`
     document.body.appendChild(dragGhost)
@@ -702,6 +702,19 @@ watch(currentView, async (view) => {
 })
 </script>
 
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background: #1a1a1a;
+  }
+}
+</style>
+
 <style scoped>
 .app-root {
   --bg: #fff;
@@ -718,6 +731,7 @@ watch(currentView, async (view) => {
   --dot: #ccc;
   color: var(--text);
   background: var(--bg);
+  min-height: 100dvh;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -802,10 +816,15 @@ watch(currentView, async (view) => {
   font-size: 14px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
-  cursor: grab;
 }
 
-.lang-name:active {
+.lang-name-text {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lang-name-text:active {
   cursor: grabbing;
 }
 
