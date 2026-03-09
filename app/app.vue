@@ -9,6 +9,7 @@
           @touchstart="onTouchStart"
           @touchmove="onTouchMove"
           @touchend="onTouchEnd"
+          @dragover.prevent="onContainerDragOver"
         >
           <div
             class="pages-track"
@@ -19,11 +20,38 @@
               :key="pageIdx"
               class="page"
             >
-              <div class="lang-grid">
-                <div v-for="lang in page" :key="lang.language" class="lang-card">
-                  <div class="lang-name">
+              <div class="lang-grid" :class="gridClass(page.length)">
+                <div
+                  v-for="lang in page"
+                  :key="lang.language"
+                  class="lang-card"
+                  :class="{ 'drag-over': dragOverLang === lang.language, 'dragging': draggingLang === lang.language }"
+                  :data-lang="lang.language"
+                  @dragover.prevent="dragOverLang = lang.language"
+                  @dragleave="dragOverLang = null"
+                  @drop="onDrop(lang.language)"
+                >
+                  <div
+                    class="lang-name"
+                    draggable="true"
+                    @dragstart="onDragStart(lang.language)"
+                    @dragend="onDragEnd"
+                    @touchstart.prevent="onLangTouchStart($event, lang.language)"
+                  >
                     <span>{{ lang.name }}</span>
-                    <button class="remove-btn" @click="removeLanguage(lang.language)" aria-label="Remove language">✕</button>
+                    <span class="lang-actions">
+                      <button
+                        v-if="savedSource?.code !== lang.language"
+                        class="source-btn"
+                        @click.stop="setSourceAndRetranslate(lang.language)"
+                        aria-label="Translate from this language"
+                        title="Translate from this language"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                      </button>
+                      <span v-else class="source-indicator">●</span>
+                      <button class="remove-btn" @click="removeLanguage(lang.language)" aria-label="Remove language">✕</button>
+                    </span>
                   </div>
                   <textarea
                     :value="langTexts[lang.language] ?? ''"
@@ -126,22 +154,23 @@
       </template>
 
       <nav class="bottom-nav">
-        <button v-if="currentView === 'translate'" class="nav-btn" @click="savePhrase" aria-label="Save phrase">
+        <div class="nav-center">
+          <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" aria-label="History">
+            <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'history' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </button>
+
+          <button v-if="currentView === 'translate'" class="add-btn" @click="showModal = true" aria-label="Add language">+</button>
+          <button v-else class="add-btn" @click="currentView = 'translate'" aria-label="Back to translate">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </button>
+
+          <button class="nav-btn" :class="{ active: currentView === 'bookmarks' }" @click="toggleBookmarks" aria-label="Bookmarks">
+            <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'bookmarks' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </button>
+        </div>
+
+        <button v-if="currentView === 'translate'" class="nav-btn save-btn" @click="savePhrase" aria-label="Save phrase">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        </button>
-        <span v-else class="nav-btn-spacer" />
-
-        <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" aria-label="History">
-          <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'history' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </button>
-
-        <button v-if="currentView === 'translate'" class="add-btn" @click="showModal = true" aria-label="Add language">+</button>
-        <button v-else class="add-btn" @click="currentView = 'translate'" aria-label="Back to translate">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        </button>
-
-        <button class="nav-btn" :class="{ active: currentView === 'bookmarks' }" @click="toggleBookmarks" aria-label="Bookmarks">
-          <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'bookmarks' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
         </button>
       </nav>
 
@@ -179,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-const LANGS_PER_PAGE = 4
+const LANGS_PER_PAGE = 6
 const DEFAULT_LANGUAGES = ['en', 'es', 'sw', 'de', 'pt', 'ja']
 const RTL_LANGUAGES = new Set(['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'ckb', 'pa-Arab', 'ms-Arab'])
 
@@ -231,6 +260,14 @@ function onLangInput(code: string, value: string) {
     lastTranslatedText = trimmed
     triggerTranslation(code, value)
   }, DEBOUNCE_MS)
+}
+
+function setSourceAndRetranslate(code: string) {
+  const text = langTexts[code] ?? ''
+  if (!text.trim()) return
+  savedSource.value = { code, text }
+  lastTranslatedText = text.trim()
+  triggerTranslation(code, text)
 }
 
 async function triggerTranslation(sourceCode: string, text: string) {
@@ -286,6 +323,155 @@ const pages = computed(() => {
   return result.length ? result : [[]]
 })
 
+function gridClass(count: number) {
+  if (count <= 2) return 'grid-2'
+  if (count <= 4) return 'grid-4'
+  return 'grid-6'
+}
+
+// Drag-and-drop reorder (desktop HTML5 + mobile touch)
+const draggingLang = ref<string | null>(null)
+const dragOverLang = ref<string | null>(null)
+let edgeSwitchTimer: ReturnType<typeof setTimeout> | null = null
+const EDGE_ZONE = 40
+
+function onDragStart(code: string) {
+  draggingLang.value = code
+}
+
+function onDragEnd() {
+  draggingLang.value = null
+  dragOverLang.value = null
+  if (edgeSwitchTimer) { clearTimeout(edgeSwitchTimer); edgeSwitchTimer = null }
+}
+
+function onContainerDragOver(e: DragEvent) {
+  if (!draggingLang.value) return
+  const x = e.clientX
+  const screenW = window.innerWidth
+  if (x < EDGE_ZONE && currentPage.value > 0) {
+    if (!edgeSwitchTimer) {
+      edgeSwitchTimer = setTimeout(() => {
+        if (currentPage.value > 0) currentPage.value--
+        edgeSwitchTimer = null
+      }, 400)
+    }
+  } else if (x > screenW - EDGE_ZONE && currentPage.value < totalPages.value - 1) {
+    if (!edgeSwitchTimer) {
+      edgeSwitchTimer = setTimeout(() => {
+        if (currentPage.value < totalPages.value - 1) currentPage.value++
+        edgeSwitchTimer = null
+      }, 400)
+    }
+  } else {
+    if (edgeSwitchTimer) { clearTimeout(edgeSwitchTimer); edgeSwitchTimer = null }
+  }
+}
+
+function onDrop(targetCode: string) {
+  const srcCode = draggingLang.value
+  if (!srcCode || srcCode === targetCode) {
+    dragOverLang.value = null
+    return
+  }
+  const arr = selectedLanguages.value
+  const srcIdx = arr.findIndex(l => l.language === srcCode)
+  const targetIdx = arr.findIndex(l => l.language === targetCode)
+  if (srcIdx === -1 || targetIdx === -1) return
+  const [moved] = arr.splice(srcIdx, 1)
+  arr.splice(targetIdx, 0, moved!)
+  dragOverLang.value = null
+  draggingLang.value = null
+}
+
+// Mobile touch drag
+const isDraggingLang = ref(false)
+let dragGhost: HTMLElement | null = null
+
+function onLangTouchStart(e: TouchEvent, code: string) {
+  const touch = e.touches[0]
+  if (!touch) return
+  draggingLang.value = code
+  isDraggingLang.value = true
+
+  // Create ghost
+  const target = (e.currentTarget as HTMLElement).closest('.lang-card') as HTMLElement
+  if (target) {
+    dragGhost = document.createElement('div')
+    dragGhost.className = 'drag-ghost'
+    dragGhost.textContent = target.querySelector('.lang-name span')?.textContent ?? code
+    dragGhost.style.left = `${touch.clientX}px`
+    dragGhost.style.top = `${touch.clientY}px`
+    document.body.appendChild(dragGhost)
+  }
+
+  document.addEventListener('touchmove', onLangTouchMove, { passive: false })
+  document.addEventListener('touchend', onLangTouchEnd, { once: true })
+}
+
+function onLangTouchMove(e: TouchEvent) {
+  e.preventDefault()
+  const touch = e.touches[0]
+  if (!touch) return
+
+  // Move ghost
+  if (dragGhost) {
+    dragGhost.style.left = `${touch.clientX}px`
+    dragGhost.style.top = `${touch.clientY}px`
+  }
+
+  // Detect target card under finger
+  if (dragGhost) dragGhost.style.pointerEvents = 'none'
+  const el = document.elementFromPoint(touch.clientX, touch.clientY)
+  if (dragGhost) dragGhost.style.pointerEvents = ''
+  const card = el?.closest('[data-lang]') as HTMLElement | null
+  dragOverLang.value = card?.dataset.lang ?? null
+
+  // Edge detection for page switching
+  const screenW = window.innerWidth
+  if (touch.clientX < EDGE_ZONE && currentPage.value > 0) {
+    if (!edgeSwitchTimer) {
+      edgeSwitchTimer = setTimeout(() => {
+        if (currentPage.value > 0) currentPage.value--
+        edgeSwitchTimer = null
+      }, 400)
+    }
+  } else if (touch.clientX > screenW - EDGE_ZONE && currentPage.value < totalPages.value - 1) {
+    if (!edgeSwitchTimer) {
+      edgeSwitchTimer = setTimeout(() => {
+        if (currentPage.value < totalPages.value - 1) currentPage.value++
+        edgeSwitchTimer = null
+      }, 400)
+    }
+  } else {
+    if (edgeSwitchTimer) { clearTimeout(edgeSwitchTimer); edgeSwitchTimer = null }
+  }
+}
+
+function onLangTouchEnd() {
+  document.removeEventListener('touchmove', onLangTouchMove)
+  if (edgeSwitchTimer) { clearTimeout(edgeSwitchTimer); edgeSwitchTimer = null }
+
+  // Perform drop
+  const targetCode = dragOverLang.value
+  const srcCode = draggingLang.value
+  if (srcCode && targetCode && srcCode !== targetCode) {
+    const arr = selectedLanguages.value
+    const srcIdx = arr.findIndex(l => l.language === srcCode)
+    const targetIdx = arr.findIndex(l => l.language === targetCode)
+    if (srcIdx !== -1 && targetIdx !== -1) {
+      const [moved] = arr.splice(srcIdx, 1)
+      arr.splice(targetIdx, 0, moved!)
+    }
+  }
+
+  // Cleanup
+  if (dragGhost) { dragGhost.remove(); dragGhost = null }
+  draggingLang.value = null
+  dragOverLang.value = null
+  isDraggingLang.value = false
+}
+
 const totalPages = computed(() => pages.value.length)
 
 const containerWidth = computed(() => pagesContainer.value?.offsetWidth ?? 0)
@@ -336,6 +522,7 @@ function closeModal() {
 }
 
 function onTouchStart(e: TouchEvent) {
+  if (isDraggingLang.value) return
   const touch = e.touches[0]
   if (!touch) return
   touchStartX = touch.clientX
@@ -344,6 +531,7 @@ function onTouchStart(e: TouchEvent) {
 }
 
 function onTouchMove(e: TouchEvent) {
+  if (isDraggingLang.value) return
   const touch = e.touches[0]
   if (!touch) return
   touchDeltaX = touch.clientX - touchStartX
@@ -351,6 +539,7 @@ function onTouchMove(e: TouchEvent) {
 }
 
 function onTouchEnd() {
+  if (isDraggingLang.value) return
   isSwiping.value = false
   const threshold = containerWidth.value * 0.25
   if (touchDeltaX < -threshold && currentPage.value < totalPages.value - 1) {
@@ -514,6 +703,40 @@ watch(currentView, async (view) => {
 </script>
 
 <style scoped>
+.app-root {
+  --bg: #fff;
+  --bg-secondary: #fafafa;
+  --bg-hover: #f0f0f0;
+  --text: #222;
+  --text-secondary: #555;
+  --text-muted: #999;
+  --border: #ddd;
+  --border-light: #eee;
+  --input-border: #ccc;
+  --accent: #222;
+  --accent-fg: #fff;
+  --dot: #ccc;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-root {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-hover: #333;
+    --text: #e8e8e8;
+    --text-secondary: #aaa;
+    --text-muted: #777;
+    --border: #444;
+    --border-light: #333;
+    --input-border: #555;
+    --accent: #e8e8e8;
+    --accent-fg: #1a1a1a;
+    --dot: #555;
+  }
+}
+
 .mobile {
   display: flex;
   flex-direction: column;
@@ -542,18 +765,32 @@ watch(currentView, async (view) => {
 
 .lang-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
   gap: 8px;
   height: 100%;
+}
+
+.lang-grid.grid-2 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.lang-grid.grid-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.lang-grid.grid-6 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
 }
 
 .lang-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .lang-name {
@@ -563,15 +800,71 @@ watch(currentView, async (view) => {
   padding: 8px 12px;
   font-weight: 600;
   font-size: 14px;
-  border-bottom: 1px solid #eee;
-  background: #fafafa;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  cursor: grab;
+}
+
+.lang-name:active {
+  cursor: grabbing;
+}
+
+.lang-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.source-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.source-btn:active {
+  color: var(--accent);
+}
+
+.source-indicator {
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.lang-card.dragging {
+  opacity: 0.4;
+}
+
+.lang-card.drag-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  padding: 6px 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+  opacity: 0.9;
 }
 
 .remove-btn {
   background: none;
   border: none;
   font-size: 14px;
-  color: #999;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
@@ -587,8 +880,10 @@ watch(currentView, async (view) => {
   outline: none;
   resize: none;
   padding: 8px 12px;
-  font-size: 14px;
+  font-size: 21px;
   font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .tab-indicator {
@@ -602,22 +897,33 @@ watch(currentView, async (view) => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ccc;
+  background: var(--dot);
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .tab-dot.active {
-  background: #222;
+  background: var(--text);
 }
 
 .bottom-nav {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 16px;
+  position: relative;
   padding: 8px 12px 12px;
-  background: #fff;
+  background: var(--bg);
+}
+
+.nav-center {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.save-btn {
+  position: absolute;
+  right: 12px;
 }
 
 .nav-btn {
@@ -626,7 +932,7 @@ watch(currentView, async (view) => {
   border-radius: 50%;
   border: none;
   background: none;
-  color: #555;
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -634,7 +940,7 @@ watch(currentView, async (view) => {
 }
 
 .nav-btn:active {
-  background: #f0f0f0;
+  background: var(--bg-hover);
 }
 
 .add-btn {
@@ -642,8 +948,8 @@ watch(currentView, async (view) => {
   height: 48px;
   border-radius: 50%;
   border: none;
-  background: #222;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-fg);
   font-size: 24px;
   cursor: pointer;
   display: flex;
@@ -654,7 +960,7 @@ watch(currentView, async (view) => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: #fff;
+  background: var(--bg);
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -671,16 +977,18 @@ watch(currentView, async (view) => {
   align-items: center;
   padding: 12px;
   gap: 8px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--border);
 }
 
 .search-input {
   flex: 1;
   padding: 10px 12px;
   font-size: 16px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   outline: none;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .close-btn {
@@ -689,6 +997,7 @@ watch(currentView, async (view) => {
   font-size: 20px;
   cursor: pointer;
   padding: 8px;
+  color: var(--text);
 }
 
 .language-list {
@@ -701,12 +1010,12 @@ watch(currentView, async (view) => {
 
 .language-item {
   padding: 14px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-light);
   cursor: pointer;
 }
 
 .language-item:active {
-  background: #f0f0f0;
+  background: var(--bg-hover);
 }
 
 .bookmarks-view {
@@ -719,7 +1028,7 @@ watch(currentView, async (view) => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #999;
+  color: var(--text-muted);
   font-size: 16px;
 }
 
@@ -737,17 +1046,17 @@ watch(currentView, async (view) => {
 .bookmarks-table th {
   position: sticky;
   top: 0;
-  background: #fafafa;
+  background: var(--bg-secondary);
   padding: 10px 8px;
   text-align: left;
   font-weight: 600;
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
 
 .bookmarks-table td {
   padding: 10px 8px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-light);
   vertical-align: top;
   max-width: 140px;
   word-wrap: break-word;
@@ -767,12 +1076,7 @@ watch(currentView, async (view) => {
 }
 
 .nav-btn.active {
-  color: #222;
-}
-
-.nav-btn-spacer {
-  width: 44px;
-  height: 44px;
+  color: var(--text);
 }
 
 .history-row {
@@ -780,7 +1084,7 @@ watch(currentView, async (view) => {
 }
 
 .history-row:active {
-  background: #f0f0f0;
+  background: var(--bg-hover);
 }
 </style>
 
