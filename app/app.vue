@@ -38,8 +38,18 @@
                       @dragstart="onDragStart(lang.language)"
                       @dragend="onDragEnd"
                       @touchstart.prevent="onLangTouchStart($event, lang.language)"
-                    >{{ lang.name }}</span>
+                    >{{ lang.language === 'auto' ? (detectedLangCode ? `Detected: ${getLanguageName(detectedLangCode)}` : 'Detect Language') : lang.name }}</span>
                     <span class="lang-actions">
+                      <button
+                        v-if="lang.language !== 'auto' && langTexts[lang.language]?.trim() && TTS_SUPPORTED_LANGUAGES.has(lang.language)"
+                        class="tts-btn"
+                        :class="{ playing: ttsPlaying === lang.language }"
+                        @click.stop="playTts(lang.language)"
+                        aria-label="Play audio"
+                        title="Listen"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                      </button>
                       <button
                         v-if="savedSource?.code !== lang.language"
                         class="source-btn"
@@ -87,14 +97,14 @@
             <table class="bookmarks-table">
               <thead>
                 <tr>
-                  <th v-for="lang in reversedLanguages" :key="lang.language">{{ lang.name }}</th>
+                  <th v-for="lang in displayLanguages" :key="lang.language">{{ lang.name }}</th>
                   <th class="action-col"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(entry, idx) in history" :key="idx" class="history-row" @click="restoreFromHistory(entry)">
                   <td
-                    v-for="lang in reversedLanguages"
+                    v-for="lang in displayLanguages"
                     :key="lang.language"
                     :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
                   >
@@ -125,14 +135,14 @@
             <table class="bookmarks-table">
               <thead>
                 <tr>
-                  <th v-for="lang in reversedLanguages" :key="lang.language">{{ lang.name }}</th>
+                  <th v-for="lang in displayLanguages" :key="lang.language">{{ lang.name }}</th>
                   <th class="action-col"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(phrase, idx) in savedPhrases" :key="idx" class="history-row" @click="restoreFromHistory(phrase)">
                   <td
-                    v-for="lang in reversedLanguages"
+                    v-for="lang in displayLanguages"
                     :key="lang.language"
                     :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
                   >
@@ -153,6 +163,74 @@
         </div>
       </template>
 
+      <!-- Context View -->
+      <template v-if="currentView === 'context'">
+        <div class="bookmarks-view" v-if="!contextData || !Object.keys(contextData).length">
+          <div class="bookmarks-empty">No context loaded yet.</div>
+        </div>
+        <div
+          v-else
+          class="pages-container"
+          ref="contextPagesContainer"
+          @touchstart="onContextTouchStart"
+          @touchmove="onContextTouchMove"
+          @touchend="onContextTouchEnd"
+        >
+          <div
+            class="pages-track"
+            :style="{ transform: `translateX(${contextTrackOffset}px)`, transition: isContextSwiping ? 'none' : 'transform 0.3s ease' }"
+          >
+            <div
+              v-for="(page, pageIdx) in contextPages"
+              :key="pageIdx"
+              class="page"
+            >
+              <div class="lang-grid" :class="gridClass(page.length)">
+                <div
+                  v-for="lang in page"
+                  :key="lang"
+                  class="lang-card"
+                  :dir="RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr'"
+                >
+                  <div class="lang-name">
+                    <span class="lang-name-text">{{ getLanguageName(lang) }}</span>
+                  </div>
+                  <div class="context-content">
+                    <div class="context-section">
+                      <div class="context-label">{{ contextLabels[lang]?.definitions ?? 'Definitions' }}</div>
+                      <ul class="context-list">
+                        <li v-for="(d, i) in (contextData[lang]?.definitions ?? [])" :key="i">{{ d }}</li>
+                      </ul>
+                    </div>
+                    <div class="context-section">
+                      <div class="context-label">{{ contextLabels[lang]?.examples ?? 'Examples' }}</div>
+                      <ul class="context-list">
+                        <li v-for="(ex, i) in (contextData[lang]?.examples ?? [])" :key="i">{{ ex }}</li>
+                      </ul>
+                    </div>
+                    <div class="context-section">
+                      <div class="context-label">{{ contextLabels[lang]?.synonyms ?? 'Synonyms' }}</div>
+                      <div class="context-synonyms">
+                        <span v-for="(s, i) in (contextData[lang]?.synonyms ?? [])" :key="i" class="context-synonym">{{ s }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="contextData && contextTotalPages > 1" class="tab-indicator">
+          <span
+            v-for="i in contextTotalPages"
+            :key="i"
+            class="tab-dot"
+            :class="{ active: i - 1 === contextPage }"
+            @click="contextPage = i - 1"
+          />
+        </div>
+      </template>
+
       <nav class="bottom-nav">
         <div class="nav-center">
           <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" aria-label="History">
@@ -169,8 +247,19 @@
           </button>
         </div>
 
+        <!-- Right side buttons -->
         <button v-if="currentView === 'translate'" class="nav-btn save-btn" @click="savePhrase" aria-label="Save phrase">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </button>
+        <button class="nav-btn context-btn" :class="{ loading: isLoadingContext, active: currentView === 'context' }" @click="fetchContext" aria-label="Get context" :disabled="isLoadingContext">
+          <svg v-if="!isLoadingContext" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span v-else class="spinner"></span>
+        </button>
+        <button v-if="currentView === 'history'" class="nav-btn save-btn" @click="exportHistoryCsv" aria-label="Export history CSV">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button v-if="currentView === 'bookmarks'" class="nav-btn save-btn" @click="exportBookmarksCsv" aria-label="Export bookmarks CSV">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
       </nav>
 
@@ -214,7 +303,9 @@ const RTL_LANGUAGES = new Set(['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', '
 
 const { isMobile } = useDevice()
 
-const currentView = ref<'translate' | 'bookmarks' | 'history'>('translate')
+const currentView = ref<'translate' | 'bookmarks' | 'history' | 'context'>('translate')
+
+const DETECT_LANG = { language: 'auto', name: 'Detect Language' }
 
 const app = useNuxtApp()
 const languages = app.$supportedLanguages.value as { language: string; name: string }[]
@@ -240,6 +331,47 @@ const langTexts = reactive<Record<string, string>>({})
 const isTranslating = ref(false)
 let translateTimer: ReturnType<typeof setTimeout> | null = null
 const DEBOUNCE_MS = 500
+const TTS_SUPPORTED_LANGUAGES = new Set([
+  'ar', 'bn', 'da', 'de', 'el', 'en', 'en-GB', 'en-AU', 'en-IN',
+  'es', 'et', 'fi', 'fr', 'fr-CA', 'gu', 'he', 'iw', 'hi', 'it',
+  'ja', 'ko', 'mr', 'nb', 'no', 'nl', 'pl', 'pt', 'pt-PT', 'ru',
+  'sv', 'ta', 'te', 'tr', 'uk', 'ur', 'vi', 'yue',
+])
+const ttsPlaying = ref<string | null>(null)
+let ttsAudio: HTMLAudioElement | null = null
+
+async function playTts(langCode: string) {
+  const text = langTexts[langCode]?.trim()
+  if (!text) return
+  // If already playing this language, stop it
+  if (ttsPlaying.value === langCode && ttsAudio) {
+    ttsAudio.pause()
+    ttsAudio = null
+    ttsPlaying.value = null
+    return
+  }
+  // Stop any current playback
+  if (ttsAudio) {
+    ttsAudio.pause()
+    ttsAudio = null
+  }
+  ttsPlaying.value = langCode
+  try {
+    const result = await $fetch<{ audioContent: string }>('/api/tts', {
+      method: 'POST',
+      body: { text, languageCode: langCode },
+    })
+    const audio = new Audio(`data:audio/mpeg;base64,${result.audioContent}`)
+    ttsAudio = audio
+    audio.onended = () => { ttsPlaying.value = null; ttsAudio = null }
+    audio.onerror = () => { ttsPlaying.value = null; ttsAudio = null }
+    await audio.play()
+  } catch (e) {
+    console.error('TTS failed', e)
+    ttsPlaying.value = null
+    ttsAudio = null
+  }
+}
 
 const DEFAULT_SOURCE = { code: 'en', text: 'Lets become polyglots!!' }
 const savedSource = useCookie<{ code: string; text: string }>('last-source', {
@@ -277,23 +409,44 @@ async function triggerTranslation(sourceCode: string, text: string) {
     }
     return
   }
+  const hasAutoLang = selectedLanguages.value.some(l => l.language === 'auto')
   const targetLanguages = selectedLanguages.value
     .map(l => l.language)
-    .filter(c => c !== sourceCode)
+    .filter(c => c !== sourceCode && c !== 'auto')
+
+  // If auto/detect is selected and we have a detected language, translate into it too
+  if (sourceCode !== 'auto' && hasAutoLang && detectedLangCode.value) {
+    if (detectedLangCode.value === sourceCode) {
+      // Detected lang same as source, just copy text
+      langTexts['auto'] = text
+    } else if (!targetLanguages.includes(detectedLangCode.value)) {
+      targetLanguages.push(detectedLangCode.value)
+    }
+  }
+
   if (!targetLanguages.length) return
 
   isTranslating.value = true
   try {
     const result = await $fetch<{
+      sourceLanguage: string
       translations: Record<string, string>
     }>('/api/translate', {
       method: 'POST',
-      body: { text, sourceLanguage: sourceCode, targetLanguages },
+      body: { text, sourceLanguage: sourceCode === 'auto' ? '' : sourceCode, targetLanguages },
     })
     for (const [code, translated] of Object.entries(result.translations)) {
       langTexts[code] = translated
     }
-    addToHistory(sourceCode, text, result.translations)
+    // Map detected language translation to the auto card
+    if (sourceCode !== 'auto' && hasAutoLang && detectedLangCode.value && result.translations[detectedLangCode.value]) {
+      langTexts['auto'] = result.translations[detectedLangCode.value]!
+    }
+    // If auto-detect, update the detect card text with source info
+    if (sourceCode === 'auto' && result.sourceLanguage) {
+      detectedLangCode.value = result.sourceLanguage
+    }
+    addToHistory(sourceCode === 'auto' ? (result.sourceLanguage || 'auto') : sourceCode, text, result.translations)
   } catch (e) {
     console.error('Translation failed', e)
   } finally {
@@ -306,6 +459,7 @@ const search = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 const pagesContainer = ref<HTMLElement | null>(null)
 const currentPage = ref(0)
+const detectedLangCode = ref('')
 
 // Swipe state
 const isSwiping = ref(false)
@@ -314,6 +468,7 @@ let touchDeltaX = 0
 const swipeDelta = ref(0)
 
 const reversedLanguages = computed(() => [...selectedLanguages.value].reverse())
+const displayLanguages = computed(() => reversedLanguages.value.filter(l => l.language !== 'auto'))
 
 const pages = computed(() => {
   const result: { language: string; name: string }[][] = []
@@ -484,20 +639,29 @@ const selectedCodes = computed(() => new Set(selectedLanguages.value.map(l => l.
 
 const filteredLanguages = computed(() => {
   const q = search.value.toLowerCase()
-  return languages.filter(lang =>
-    !selectedCodes.value.has(lang.language) &&
+  const selected = selectedCodes.value
+  const results = languages.filter(lang =>
+    !selected.has(lang.language) &&
     (lang.name.toLowerCase().includes(q) || lang.language.toLowerCase().includes(q))
   )
+  // Add detect language option if not already selected and matches search
+  if (!selected.has('auto') && ('detect language'.includes(q) || 'auto'.includes(q))) {
+    results.unshift(DETECT_LANG)
+  }
+  return results
 })
 
 async function selectLanguage(lang: { language: string; name: string }) {
   selectedLanguages.value.push(lang)
   closeModal()
+  // Don't try to translate for detect language
+  if (lang.language === 'auto') return
   if (savedSource.value && savedSource.value.text.trim()) {
+    const srcCode = savedSource.value.code === 'auto' ? '' : savedSource.value.code
     try {
       const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
         method: 'POST',
-        body: { text: savedSource.value.text, sourceLanguage: savedSource.value.code, targetLanguages: [lang.language] },
+        body: { text: savedSource.value.text, sourceLanguage: srcCode, targetLanguages: [lang.language] },
       })
       if (result.translations[lang.language]) {
         langTexts[lang.language] = result.translations[lang.language]!
@@ -519,6 +683,22 @@ function removeLanguage(code: string) {
 function closeModal() {
   showModal.value = false
   search.value = ''
+}
+
+// Back button closes modal
+if (!import.meta.server) {
+  watch(showModal, (val) => {
+    if (val) {
+      window.history.pushState({ modal: true }, '')
+      const handler = () => {
+        if (showModal.value) {
+          showModal.value = false
+          search.value = ''
+        }
+      }
+      window.addEventListener('popstate', handler, { once: true })
+    }
+  })
 }
 
 function onTouchStart(e: TouchEvent) {
@@ -559,19 +739,29 @@ watch(showModal, (val) => {
 onMounted(async () => {
   savedPhrases.value = loadSavedPhrases()
   history.value = loadHistory()
+  // Load context cache
+  const ctxCache = loadContextCache()
+  if (ctxCache?.data) {
+    contextData.value = ctxCache.data
+    lastContextSourceText = ctxCache.sourceText
+    loadContextLabels(Object.keys(ctxCache.data))
+  }
   const src = savedSource.value ?? DEFAULT_SOURCE
   langTexts[src.code] = src.text
   const targets = selectedLanguages.value
     .map(l => l.language)
-    .filter(c => c !== src.code)
+    .filter(c => c !== src.code && c !== 'auto')
   if (!src.text.trim() || !targets.length) return
   try {
-    const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
+    const result = await $fetch<{ sourceLanguage: string; translations: Record<string, string> }>('/api/translate', {
       method: 'POST',
-      body: { text: src.text, sourceLanguage: src.code, targetLanguages: targets },
+      body: { text: src.text, sourceLanguage: src.code === 'auto' ? '' : src.code, targetLanguages: targets },
     })
     for (const [code, translated] of Object.entries(result.translations)) {
       langTexts[code] = translated
+    }
+    if (src.code === 'auto' && result.sourceLanguage) {
+      detectedLangCode.value = result.sourceLanguage
     }
   } catch (e) {
     console.error('Initial translation failed', e)
@@ -678,14 +868,24 @@ function restoreFromHistory(entry: SavedPhrase) {
   currentView.value = 'translate'
 }
 
-// Auto-translate missing languages when entering bookmarks view
-watch(currentView, async (view) => {
-  if (view !== 'bookmarks') return
-  const activeCodes = selectedLanguages.value.map(l => l.language)
+// Auto-translate missing languages when entering bookmarks or history view, or when languages change
+watch([currentView, () => selectedLanguages.value.length], async ([view]) => {
+  if (view !== 'bookmarks' && view !== 'history') return
+  const activeCodes = selectedLanguages.value
+    .map(l => l.language)
+    .filter(c => c !== 'auto')
+  const entries = view === 'bookmarks' ? savedPhrases.value : history.value
   let changed = false
-  for (const phrase of savedPhrases.value) {
+  for (const phrase of entries) {
+    if (!phrase.sourceText?.trim() || phrase.sourceLang === 'auto') continue
     const allCodes = [phrase.sourceLang, ...Object.keys(phrase.translations)]
-    const missing = activeCodes.filter(c => !allCodes.includes(c))
+    const missing = activeCodes.filter(c => {
+      if (allCodes.includes(c)) return false
+      if (c === phrase.sourceLang) return false
+      // Skip same base language (e.g. pt vs pt-PT)
+      if (c.split('-')[0] === phrase.sourceLang.split('-')[0]) return false
+      return true
+    })
     if (!missing.length) continue
     try {
       const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
@@ -695,11 +895,239 @@ watch(currentView, async (view) => {
       Object.assign(phrase.translations, result.translations)
       changed = true
     } catch (e) {
-      console.error('Auto-translate saved phrase failed', e)
+      console.error(`Auto-translate ${view} phrase failed`, e)
     }
   }
-  if (changed) persistPhrases()
+  if (changed) {
+    if (view === 'bookmarks') persistPhrases()
+    else persistHistory()
+  }
 })
+
+// Context feature
+interface ContextEntry {
+  examples: string[]
+  definitions: string[]
+  synonyms: string[]
+}
+
+const contextData = ref<Record<string, ContextEntry> | null>(null)
+const contextPage = ref(0)
+const isLoadingContext = ref(false)
+const contextPagesContainer = ref<HTMLElement | null>(null)
+
+// Translated context labels ("Definitions", "Examples", "Synonyms" in each language)
+interface ContextLabels { definitions: string; examples: string; synonyms: string }
+const contextLabels = ref<Record<string, ContextLabels>>({})
+const savedContextLabels = useCookie<Record<string, ContextLabels>>('poly-context-labels', {
+  default: () => ({}),
+  watch: true,
+  maxAge: 60 * 60 * 24 * 365,
+})
+
+async function loadContextLabels(langCodes: string[]) {
+  const cached = savedContextLabels.value ?? {}
+  cached['en'] = { definitions: 'Definitions', examples: 'Examples', synonyms: 'Synonyms' }
+  contextLabels.value = { ...cached }
+  const missing = langCodes.filter(c => c !== 'en' && !cached[c])
+  if (!missing.length) return
+  // Translate the three label words from English to each missing language
+  const words = ['Definitions', 'Examples', 'Synonyms']
+  for (const word of words) {
+    try {
+      const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
+        method: 'POST',
+        body: { text: word, sourceLanguage: 'en', targetLanguages: missing },
+      })
+      for (const [code, translated] of Object.entries(result.translations)) {
+        if (!contextLabels.value[code]) contextLabels.value[code] = { definitions: 'Definitions', examples: 'Examples', synonyms: 'Synonyms' }
+        const key = word.toLowerCase() as keyof ContextLabels
+        contextLabels.value[code]![key] = translated
+      }
+    } catch (e) {
+      console.error('Label translation failed', e)
+    }
+  }
+  // Persist to cookie
+  savedContextLabels.value = { ...contextLabels.value }
+}
+
+const contextLanguages = computed(() => {
+  if (!contextData.value) return []
+  return Object.keys(contextData.value)
+})
+
+const contextPages = computed(() => {
+  const langs = contextLanguages.value
+  const result: string[][] = []
+  for (let i = 0; i < langs.length; i += LANGS_PER_PAGE) {
+    result.push(langs.slice(i, i + LANGS_PER_PAGE))
+  }
+  return result.length ? result : [[]]
+})
+
+const contextTotalPages = computed(() => contextPages.value.length)
+const contextContainerWidth = computed(() => contextPagesContainer.value?.offsetWidth ?? 0)
+const contextTrackOffset = computed(() => {
+  return -contextPage.value * contextContainerWidth.value + contextSwipeDelta.value
+})
+
+// Context swipe state
+const isContextSwiping = ref(false)
+let contextTouchStartX = 0
+let contextTouchDeltaX = 0
+const contextSwipeDelta = ref(0)
+
+function onContextTouchStart(e: TouchEvent) {
+  const touch = e.touches[0]
+  if (!touch) return
+  contextTouchStartX = touch.clientX
+  contextTouchDeltaX = 0
+  isContextSwiping.value = true
+}
+
+function onContextTouchMove(e: TouchEvent) {
+  const touch = e.touches[0]
+  if (!touch) return
+  contextTouchDeltaX = touch.clientX - contextTouchStartX
+  contextSwipeDelta.value = contextTouchDeltaX
+}
+
+function onContextTouchEnd() {
+  isContextSwiping.value = false
+  const threshold = contextContainerWidth.value * 0.25
+  if (contextTouchDeltaX < -threshold && contextPage.value < contextTotalPages.value - 1) {
+    contextPage.value++
+  } else if (contextTouchDeltaX > threshold && contextPage.value > 0) {
+    contextPage.value--
+  }
+  contextSwipeDelta.value = 0
+}
+
+function getLanguageName(code: string): string {
+  return languages.find(l => l.language === code)?.name ?? code
+}
+
+// Context caching
+const CONTEXT_KEY = 'poly-context-cache'
+let lastContextSourceText = ''
+
+function loadContextCache(): { sourceText: string; data: Record<string, ContextEntry> } | null {
+  if (import.meta.server) return null
+  try {
+    const raw = localStorage.getItem(CONTEXT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function persistContextCache(sourceText: string, data: Record<string, ContextEntry>) {
+  if (import.meta.server) return
+  localStorage.setItem(CONTEXT_KEY, JSON.stringify({ sourceText, data }))
+}
+
+async function fetchContext() {
+  const src = savedSource.value
+  if (!src || !src.text.trim()) return
+
+  const currentText = src.text.trim()
+
+  // If source text hasn't changed, show cached data
+  if (contextData.value && lastContextSourceText === currentText) {
+    contextPage.value = 0
+    currentView.value = 'context'
+    return
+  }
+
+  // Try localStorage cache
+  const cache = loadContextCache()
+  if (cache && cache.sourceText === currentText && cache.data && Object.keys(cache.data).length) {
+    contextData.value = cache.data
+    lastContextSourceText = currentText
+    contextPage.value = 0
+    currentView.value = 'context'
+    loadContextLabels(Object.keys(cache.data))
+    return
+  }
+
+  isLoadingContext.value = true
+  try {
+    const items = selectedLanguages.value
+      .filter(l => l.language !== 'auto')
+      .map(l => ({
+        language: l.language,
+        text: langTexts[l.language] ?? src.text,
+      }))
+      .filter(i => i.text.trim())
+    if (!items.length) return
+
+    // Split into chunks of 11 to avoid Gemini token limits
+    const CHUNK_SIZE = 11
+    let merged: Record<string, ContextEntry> = {}
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE)
+      const result = await $fetch<Record<string, ContextEntry>>('/api/context', {
+        method: 'POST',
+        body: { items: chunk },
+      })
+      merged = { ...merged, ...result }
+    }
+
+    contextData.value = merged
+    lastContextSourceText = currentText
+    contextPage.value = 0
+    currentView.value = 'context'
+    persistContextCache(currentText, merged)
+    // Load translated labels for context section headers
+    loadContextLabels(Object.keys(merged))
+  } catch (e) {
+    console.error('Context fetch failed', e)
+  } finally {
+    isLoadingContext.value = false
+  }
+}
+
+// CSV export
+function escapeCsvCell(val: string): string {
+  if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+    return `"${val.replace(/"/g, '""')}"`
+  }
+  return val
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const csv = rows.map(r => r.map(escapeCsvCell).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportHistoryCsv() {
+  const langCodes = displayLanguages.value.map(l => l.language)
+  const header = displayLanguages.value.map(l => l.name)
+  const rows = [header]
+  for (const entry of history.value) {
+    rows.push(langCodes.map(code =>
+      code === entry.sourceLang ? entry.sourceText : (entry.translations[code] ?? '')
+    ))
+  }
+  downloadCsv('poly-history.csv', rows)
+}
+
+function exportBookmarksCsv() {
+  const langCodes = displayLanguages.value.map(l => l.language)
+  const header = displayLanguages.value.map(l => l.name)
+  const rows = [header]
+  for (const phrase of savedPhrases.value) {
+    rows.push(langCodes.map(code =>
+      code === phrase.sourceLang ? phrase.sourceText : (phrase.translations[code] ?? '')
+    ))
+  }
+  downloadCsv('poly-bookmarks.csv', rows)
+}
 </script>
 
 <style>
@@ -846,6 +1274,22 @@ html, body {
 }
 
 .source-btn:active {
+  color: var(--accent);
+}
+
+.tts-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.tts-btn:active,
+.tts-btn.playing {
   color: var(--accent);
 }
 
@@ -1104,6 +1548,70 @@ html, body {
 
 .history-row:active {
   background: var(--bg-hover);
+}
+
+.context-btn {
+  position: absolute;
+  left: 12px;
+}
+
+.context-btn.loading {
+  pointer-events: none;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.context-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.context-section {
+  margin-bottom: 8px;
+}
+
+.context-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.context-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.context-synonyms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.context-synonym {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 13px;
 }
 </style>
 
