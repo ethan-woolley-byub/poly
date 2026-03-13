@@ -2,10 +2,10 @@ import { SpeechifyClient } from '@speechify/api'
 
 // Map app language codes to Speechify voice IDs
 const VOICE_MAP: Record<string, string> = {
-  ar: 'aicha',       // ar-AE
+  ar: 'ismail',      // ar-AE
   bn: 'avik',        // bn-IN
   da: 'frederik',    // da-DK
-  de: 'frederick',   // de-DE
+  de: 'hannes',      // de-DE
   el: 'kostas',      // el-GR
   en: 'oliver',      // en-US
   'en-GB': 'russell',
@@ -28,7 +28,7 @@ const VOICE_MAP: Record<string, string> = {
   no: 'jakob',       // nb-NO alias
   nl: 'daan',        // nl-NL
   pl: 'dominika',    // pl-PL
-  pt: 'lucas',       // pt-BR
+  pt: 'henrique',    // pt-BR
   'pt-PT': 'diogo',
   ru: 'mikhail',     // ru-RU
   sv: 'axel',        // sv-SE

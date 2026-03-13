@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#222"/>
+  <text x="32" y="48" font-family="serif" font-size="42" font-weight="bold" fill="#fff" text-anchor="middle" opacity="0.85">À</text>
+  <text x="32" y="48" font-family="serif" font-size="38" fill="#e17055" text-anchor="middle" opacity="0.65" transform="translate(4, 4)">あ</text>
+</svg>

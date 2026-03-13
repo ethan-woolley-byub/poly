@@ -3,6 +3,8 @@ import { defineNuxtPlugin } from '#app'
 type Language = {
   language: string
   name: string
+  gt: boolean
+  dl: boolean
 }
 
 export default defineNuxtPlugin(async (nuxtApp) => {

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#e8e8e8" stroke-width="3"/>
+  <text x="10" y="46" font-family="serif" font-size="38" font-weight="bold" fill="#222">À</text>
+  <text x="28" y="50" font-family="serif" font-size="32" fill="#c0392b" opacity="0.8">あ</text>
+</svg>

@@ -35,20 +35,33 @@
                     <span
                       class="lang-name-text"
                       draggable="true"
-                      @dragstart="onDragStart(lang.language)"
+                      @dragstart="onDragStart(lang.language, $event)"
                       @dragend="onDragEnd"
                       @touchstart.prevent="onLangTouchStart($event, lang.language)"
                     >{{ lang.language === 'auto' ? (detectedLangCode ? `Detected: ${getLanguageName(detectedLangCode)}` : 'Detect Language') : lang.name }}</span>
                     <span class="lang-actions">
                       <button
+                        v-if="langTexts[lang.language]?.trim()"
+                        class="copy-btn"
+                        :class="{ copied: copiedLang === lang.language }"
+                        @click.stop="copyText(lang.language)"
+                        aria-label="Copy text"
+                        title="Copy"
+                      >
+                        <svg v-if="copiedLang !== lang.language" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </button>
+                      <button
                         v-if="lang.language !== 'auto' && langTexts[lang.language]?.trim() && TTS_SUPPORTED_LANGUAGES.has(lang.language)"
                         class="tts-btn"
-                        :class="{ playing: ttsPlaying === lang.language }"
+                        :class="{ playing: ttsPlaying === lang.language, loading: ttsLoading === lang.language }"
+                        :disabled="ttsLoading === lang.language"
                         @click.stop="playTts(lang.language)"
                         aria-label="Play audio"
                         title="Listen"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                        <span v-if="ttsLoading === lang.language" class="tts-spinner"></span>
+                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                       </button>
                       <button
                         v-if="savedSource?.code !== lang.language"
@@ -63,13 +76,29 @@
                       <button class="remove-btn" @click="removeLanguage(lang.language)" aria-label="Remove language">✕</button>
                     </span>
                   </div>
-                  <textarea
-                    :value="langTexts[lang.language] ?? ''"
-                    class="lang-textarea"
-                    :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
-                    :placeholder="`Type in ${lang.name}...`"
-                    @input="onLangInput(lang.language, ($event.target as HTMLTextAreaElement).value)"
-                  />
+                  <div class="textarea-wrapper">
+                    <textarea
+                      v-if="canTranslatePair(savedSource?.code === 'auto' ? (detectedLangCode || 'auto') : (savedSource?.code ?? 'en'), lang.language)"
+                      :value="langTexts[lang.language] ?? ''"
+                      class="lang-textarea"
+                      :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
+                      :placeholder="`Type in ${lang.name}...`"
+                      @input="onLangInput(lang.language, ($event.target as HTMLTextAreaElement).value)"
+                    />
+                    <div v-else class="translate-error">
+                      Cannot translate from {{ getLanguageName(savedSource?.code === 'auto' ? (detectedLangCode || 'auto') : (savedSource?.code ?? 'en')) }} to {{ lang.name }}
+                    </div>
+                    <div v-if="romanizations[lang.language] && NON_LATIN_LANGUAGES.has(lang.language)" class="romanization">
+                      {{ romanizations[lang.language] }}
+                    </div>
+                    <div class="textarea-footer">
+                      <span class="char-count">{{ (langTexts[lang.language] ?? '').length }}c · {{ wordCount(langTexts[lang.language] ?? '') }}w</span>
+                      <span class="engine-badges">
+                        <span v-if="langSupportMap.get(lang.language)?.gt" class="engine-badge gt" :class="{ active: getActiveEngine(lang.language) === 'gt' }">GT</span>
+                        <span v-if="langSupportMap.get(lang.language)?.dl" class="engine-badge dl" :class="{ active: getActiveEngine(lang.language) === 'dl' }">DL</span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -90,8 +119,11 @@
       <!-- History View -->
       <template v-if="currentView === 'history'">
         <div class="bookmarks-view">
-          <div v-if="!history.length" class="bookmarks-empty">
-            No translation history yet.
+          <div class="list-search-bar">
+            <input v-model="historySearch" type="text" placeholder="Search history..." class="search-input" />
+          </div>
+          <div v-if="!filteredHistory.length" class="bookmarks-empty">
+            {{ history.length ? 'No matching history.' : 'No translation history yet.' }}
           </div>
           <div v-else class="bookmarks-table-wrapper">
             <table class="bookmarks-table">
@@ -102,7 +134,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(entry, idx) in history" :key="idx" class="history-row" @click="restoreFromHistory(entry)">
+                <tr v-for="(entry, idx) in filteredHistory" :key="idx" class="history-row" @click="restoreFromHistory(entry)">
                   <td
                     v-for="lang in displayLanguages"
                     :key="lang.language"
@@ -116,7 +148,7 @@
                     </template>
                   </td>
                   <td class="action-col" @click.stop>
-                    <button class="delete-btn" @click="deleteHistoryEntry(idx)" aria-label="Delete history entry">🗑</button>
+                    <button class="delete-btn" @click="deleteHistoryEntry(history.indexOf(entry))" aria-label="Delete history entry">🗑</button>
                   </td>
                 </tr>
               </tbody>
@@ -128,8 +160,11 @@
       <!-- Bookmarks View -->
       <template v-if="currentView === 'bookmarks'">
         <div class="bookmarks-view">
-          <div v-if="!savedPhrases.length" class="bookmarks-empty">
-            No saved phrases yet.
+          <div class="list-search-bar">
+            <input v-model="bookmarksSearch" type="text" placeholder="Search saved phrases..." class="search-input" />
+          </div>
+          <div v-if="!filteredBookmarks.length" class="bookmarks-empty">
+            {{ savedPhrases.length ? 'No matching phrases.' : 'No saved phrases yet.' }}
           </div>
           <div v-else class="bookmarks-table-wrapper">
             <table class="bookmarks-table">
@@ -140,7 +175,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(phrase, idx) in savedPhrases" :key="idx" class="history-row" @click="restoreFromHistory(phrase)">
+                <tr v-for="(phrase, idx) in filteredBookmarks" :key="idx" class="history-row" @click="restoreFromHistory(phrase)">
                   <td
                     v-for="lang in displayLanguages"
                     :key="lang.language"
@@ -152,13 +187,97 @@
                     <template v-else>
                       {{ phrase.translations[lang.language] ?? '...' }}
                     </template>
+                    <div class="srs-bar" v-if="lang.language !== phrase.sourceLang && phrase.translations[lang.language]">
+                      <div class="srs-bar-fill" :style="{ width: `${getSrsMastery(phrase.sourceLang, lang.language, phrase.sourceText) * 100}%` }" />
+                    </div>
                   </td>
                   <td class="action-col" @click.stop>
-                    <button class="delete-btn" @click="deletePhrase(idx)" aria-label="Delete phrase">🗑</button>
+                    <button class="delete-btn" @click="deletePhrase(savedPhrases.indexOf(phrase))" aria-label="Delete phrase">🗑</button>
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- Quiz View -->
+      <template v-if="currentView === 'quiz'">
+        <div class="quiz-view">
+          <!-- Setup screen -->
+          <div v-if="quizPhase === 'setup'" class="quiz-setup">
+            <h2 class="quiz-title">Quiz</h2>
+            <div class="quiz-field">
+              <label>From</label>
+              <select v-model="quizFromLang" class="quiz-select">
+                <option v-for="code in quizAvailableLangs" :key="code" :value="code">{{ getLanguageName(code) }}</option>
+              </select>
+            </div>
+            <div class="quiz-field">
+              <label>To</label>
+              <select v-model="quizToLang" class="quiz-select">
+                <option v-for="code in quizAvailableLangs" :key="code" :value="code">{{ getLanguageName(code) }}</option>
+              </select>
+            </div>
+            <div class="quiz-field">
+              <label>Terms</label>
+              <input v-model.number="quizTermCount" type="number" min="1" max="50" class="quiz-select" />
+            </div>
+            <div class="quiz-field quiz-toggle-field">
+              <label>Include phrases</label>
+              <button class="quiz-toggle" :class="{ on: quizIncludePhrases }" @click="quizIncludePhrases = !quizIncludePhrases">
+                <span class="quiz-toggle-knob" />
+              </button>
+            </div>
+            <button class="quiz-start-btn" :disabled="quizFromLang === quizToLang || !quizFromLang || !quizToLang" @click="startQuiz">Start Quiz</button>
+          </div>
+
+          <!-- Active quiz -->
+          <div v-else-if="quizPhase === 'active'" class="quiz-active">
+            <div class="quiz-progress-bar">
+              <div class="quiz-progress-fill" :style="{ width: `${((quizCurrentIdx + 1) / quizItems.length) * 100}%` }" />
+            </div>
+            <div class="quiz-counter">{{ quizCurrentIdx + 1 }} / {{ quizItems.length }}</div>
+            <div class="quiz-prompt">{{ quizItems[quizCurrentIdx]?.prompt }}</div>
+            <input
+              v-if="!quizShowResult"
+              ref="quizAnswerInput"
+              v-model="quizAnswer"
+              type="text"
+              class="quiz-input"
+              :placeholder="`Type in ${getLanguageName(quizToLang)}...`"
+              @keydown.enter="submitQuizAnswer"
+            />
+            <div v-if="quizShowResult" class="quiz-result" :class="quizResultClass">
+              <div class="quiz-result-label">{{ quizResultLabel }}</div>
+              <div v-if="quizAccentNote" class="quiz-accent-note">{{ quizAccentNote }}</div>
+              <div class="quiz-correct-answer">{{ quizItems[quizCurrentIdx]?.answer }}</div>
+            </div>
+            <div class="quiz-actions">
+              <button v-if="!quizShowResult" class="quiz-skip-btn" @click="skipQuizItem">Skip</button>
+              <button v-if="!quizShowResult" class="quiz-submit-btn" @click="submitQuizAnswer">Submit</button>
+              <button v-else class="quiz-submit-btn" @click="nextQuizItem">Next</button>
+            </div>
+          </div>
+
+          <!-- Results screen -->
+          <div v-else-if="quizPhase === 'results'" class="quiz-results">
+            <h2 class="quiz-title">Results</h2>
+            <div class="quiz-score">{{ quizCorrectCount }} / {{ quizItems.length }}</div>
+            <div class="quiz-score-pct">{{ Math.round((quizCorrectCount / quizItems.length) * 100) }}%</div>
+            <div class="quiz-results-list">
+              <div v-for="(item, i) in quizItems" :key="i" class="quiz-result-row" :class="item.wasCorrect ? 'correct' : item.wasSkipped ? 'skipped' : 'wrong'">
+                <span class="quiz-result-prompt">{{ item.prompt }}</span>
+                <span class="quiz-result-arrow">→</span>
+                <span class="quiz-result-answer">{{ item.answer }}</span>
+                <span v-if="item.userAnswer && !item.wasCorrect && !item.wasSkipped" class="quiz-result-user">({{ item.userAnswer }})</span>
+                <span class="quiz-result-icon">{{ item.wasCorrect ? '✓' : item.wasSkipped ? '–' : '✗' }}</span>
+              </div>
+            </div>
+            <div class="quiz-actions">
+              <button class="quiz-submit-btn" @click="quizPhase = 'setup'">Quiz Again</button>
+              <button class="quiz-skip-btn" @click="currentView = 'bookmarks'">Back</button>
+            </div>
           </div>
         </div>
       </template>
@@ -251,17 +370,43 @@
         <button v-if="currentView === 'translate'" class="nav-btn save-btn" @click="savePhrase" aria-label="Save phrase">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
+        <button v-if="currentView === 'translate'" class="nav-btn copyall-btn" :class="{ copied: copiedAll }" @click="copyAll" aria-label="Copy all translations">
+          <svg v-if="!copiedAll" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
         <button class="nav-btn context-btn" :class="{ loading: isLoadingContext, active: currentView === 'context' }" @click="fetchContext" aria-label="Get context" :disabled="isLoadingContext">
           <svg v-if="!isLoadingContext" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           <span v-else class="spinner"></span>
         </button>
+        <button v-if="currentView !== 'bookmarks' && currentView !== 'quiz'" class="nav-btn api-toggle-btn" @click="toggleTranslationApi" :aria-label="`Switch to ${translationApi === 'deepl' ? 'Google' : 'DeepL'}`">
+          <span class="api-label">{{ translationApi === 'deepl' ? 'DL' : 'GT' }}</span>
+        </button>
         <button v-if="currentView === 'history'" class="nav-btn save-btn" @click="exportHistoryCsv" aria-label="Export history CSV">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button v-if="currentView === 'history' && history.length" class="nav-btn clear-btn" @click="showClearConfirm = 'history'" aria-label="Clear history">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
         <button v-if="currentView === 'bookmarks'" class="nav-btn save-btn" @click="exportBookmarksCsv" aria-label="Export bookmarks CSV">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
+        <button v-if="(currentView === 'bookmarks' || currentView === 'quiz') && savedPhrases.length" class="nav-btn quiz-nav-btn" :class="{ active: currentView === 'quiz' }" @click="currentView = currentView === 'quiz' ? 'bookmarks' : 'quiz'; quizPhase = 'setup'" aria-label="Quiz">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="12" r="10"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+        <button v-if="currentView === 'bookmarks' && savedPhrases.length" class="nav-btn clear-btn" @click="showClearConfirm = 'bookmarks'" aria-label="Clear bookmarks">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
       </nav>
+
+      <div v-if="showClearConfirm" class="confirm-overlay" @click.self="closeClearConfirm">
+        <div class="confirm-modal">
+          <p>Clear all {{ showClearConfirm === 'history' ? 'history' : 'saved phrases' }}?</p>
+          <div class="confirm-actions">
+            <button class="confirm-cancel" @click="closeClearConfirm">Cancel</button>
+            <button class="confirm-delete" @click="confirmClear">Clear</button>
+          </div>
+        </div>
+      </div>
 
       <div v-if="showModal" class="modal-overlay">
         <div class="modal">
@@ -283,7 +428,11 @@
               class="language-item"
               @click="selectLanguage(lang)"
             >
-              {{ lang.name }} ({{ lang.language }})
+              <span class="language-item-name">{{ lang.name }} ({{ lang.language }})</span>
+              <span class="language-item-badges">
+                <span v-if="(lang as any).gt" class="lang-badge gt">GT</span>
+                <span v-if="(lang as any).dl" class="lang-badge dl">DL</span>
+              </span>
             </li>
           </ul>
         </div>
@@ -293,6 +442,7 @@
     <div v-else class="desktop">
       <!-- Desktop UI -->
     </div>
+
   </div>
 </template>
 
@@ -303,12 +453,12 @@ const RTL_LANGUAGES = new Set(['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', '
 
 const { isMobile } = useDevice()
 
-const currentView = ref<'translate' | 'bookmarks' | 'history' | 'context'>('translate')
+const currentView = ref<'translate' | 'bookmarks' | 'history' | 'context' | 'quiz'>('translate')
 
-const DETECT_LANG = { language: 'auto', name: 'Detect Language' }
+const DETECT_LANG = { language: 'auto', name: 'Detect Language', gt: true, dl: true }
 
 const app = useNuxtApp()
-const languages = app.$supportedLanguages.value as { language: string; name: string }[]
+const languages = app.$supportedLanguages.value as { language: string; name: string; gt: boolean; dl: boolean }[]
 
 const savedCodes = useCookie<string[]>('selected-languages', {
   default: () => DEFAULT_LANGUAGES,
@@ -316,9 +466,9 @@ const savedCodes = useCookie<string[]>('selected-languages', {
   maxAge: 60 * 60 * 24 * 365,
 })
 
-function resolveLanguages(codes: string[]): { language: string; name: string }[] {
+function resolveLanguages(codes: string[]): { language: string; name: string; gt: boolean; dl: boolean }[] {
   const map = new Map(languages.map(l => [l.language, l]))
-  return codes.map(c => map.get(c)).filter(Boolean) as { language: string; name: string }[]
+  return codes.map(c => map.get(c)).filter(Boolean) as { language: string; name: string; gt: boolean; dl: boolean }[]
 }
 
 const selectedLanguages = ref(resolveLanguages(savedCodes.value ?? DEFAULT_LANGUAGES))
@@ -338,11 +488,138 @@ const TTS_SUPPORTED_LANGUAGES = new Set([
   'sv', 'ta', 'te', 'tr', 'uk', 'ur', 'vi', 'yue',
 ])
 const ttsPlaying = ref<string | null>(null)
+const ttsLoading = ref<string | null>(null)
 let ttsAudio: HTMLAudioElement | null = null
+const copiedLang = ref<string | null>(null)
+let copiedTimer: ReturnType<typeof setTimeout> | null = null
+
+// Romanization for non-Latin scripts
+const NON_LATIN_LANGUAGES = new Set([
+  'ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'ckb',
+  'ja', 'ko', 'zh-CN', 'zh-TW', 'zh', 'yue',
+  'hi', 'bn', 'ta', 'te', 'gu', 'kn', 'ml', 'mr', 'pa', 'ne', 'si',
+  'th', 'ka', 'hy', 'am', 'ti', 'my', 'km', 'lo',
+  'el', 'ru', 'uk', 'bg', 'sr', 'mk', 'be', 'ky', 'kk', 'mn', 'tg',
+])
+const romanizations = reactive<Record<string, string>>({})
+let romanizeTimer: ReturnType<typeof setTimeout> | null = null
+
+async function fetchRomanizations() {
+  const entries = Object.entries(langTexts).filter(
+    ([code, text]) => text?.trim() && NON_LATIN_LANGUAGES.has(code)
+  )
+  for (const [code, text] of entries) {
+    try {
+      const res = await $fetch<{ romanized: string }>('/api/romanize', {
+        method: 'POST',
+        body: { text, language: code },
+      })
+      if (res.romanized) romanizations[code] = res.romanized
+      else delete romanizations[code]
+    } catch {
+      // silently fail
+    }
+  }
+}
+
+function wordCount(text: string): number {
+  if (!text.trim()) return 0
+  return text.trim().split(/\s+/).length
+}
+
+// Copy all translations
+const copiedAll = ref(false)
+let copiedAllTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyAll() {
+  const src = savedSource.value
+  if (!src) return
+  const lines: string[] = []
+  const srcName = getLanguageName(src.code)
+  lines.push(`${srcName} (${src.code}): ${src.text}`)
+  for (const lang of selectedLanguages.value) {
+    if (lang.language === src.code || lang.language === 'auto') continue
+    const text = langTexts[lang.language]?.trim()
+    if (text) lines.push(`${lang.name} (${lang.language}): ${text}`)
+  }
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'))
+    copiedAll.value = true
+    if (copiedAllTimer) clearTimeout(copiedAllTimer)
+    copiedAllTimer = setTimeout(() => { copiedAll.value = false }, 1500)
+  } catch (e) {
+    console.error('Copy all failed', e)
+  }
+}
+
+// Search for history and bookmarks
+const historySearch = ref('')
+const bookmarksSearch = ref('')
+
+// Language support lookup
+const langSupportMap = computed(() => {
+  const map = new Map<string, { gt: boolean; dl: boolean }>()
+  for (const lang of languages) {
+    map.set(lang.language, { gt: lang.gt, dl: lang.dl })
+  }
+  return map
+})
+
+function getLangEngine(srcCode: string, tgtCode: string): 'primary' | 'fallback' | 'none' {
+  if (tgtCode === 'auto') return 'primary'
+  const tgtSupport = langSupportMap.value.get(tgtCode)
+  if (!tgtSupport) return 'primary'
+  const primaryKey = translationApi.value === 'deepl' ? 'dl' as const : 'gt' as const
+  const fallbackKey = translationApi.value === 'deepl' ? 'gt' as const : 'dl' as const
+  // For auto/unknown source, just check target support
+  if (srcCode === 'auto' || srcCode === '') {
+    if (tgtSupport[primaryKey]) return 'primary'
+    if (tgtSupport[fallbackKey]) return 'fallback'
+    return 'none'
+  }
+  const srcSupport = langSupportMap.value.get(srcCode)
+  if (!srcSupport) return tgtSupport[primaryKey] ? 'primary' : tgtSupport[fallbackKey] ? 'fallback' : 'none'
+  // Find an engine both source and target support
+  if (srcSupport[primaryKey] && tgtSupport[primaryKey]) return 'primary'
+  if (srcSupport[fallbackKey] && tgtSupport[fallbackKey]) return 'fallback'
+  return 'none'
+}
+
+function canTranslatePair(srcCode: string, tgtCode: string): boolean {
+  return getLangEngine(srcCode, tgtCode) !== 'none'
+}
+
+function getActiveEngine(tgtCode: string): 'gt' | 'dl' | null {
+  const srcCode = savedSource.value?.code === 'auto' ? (detectedLangCode.value || 'auto') : (savedSource.value?.code ?? 'en')
+  const engine = getLangEngine(srcCode, tgtCode)
+  if (engine === 'none') return null
+  const primaryKey = translationApi.value === 'deepl' ? 'dl' as const : 'gt' as const
+  const fallbackKey = translationApi.value === 'deepl' ? 'gt' as const : 'dl' as const
+  return engine === 'primary' ? primaryKey : fallbackKey
+}
+
+function fallbackEndpoint(): string {
+  return translationApi.value === 'deepl' ? '/api/translate' : '/api/translate-deepl'
+}
+
+async function copyText(langCode: string) {
+  const text = langTexts[langCode]?.trim()
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedLang.value = langCode
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => { copiedLang.value = null }, 1500)
+  } catch (e) {
+    console.error('Copy failed', e)
+  }
+}
 
 async function playTts(langCode: string) {
   const text = langTexts[langCode]?.trim()
   if (!text) return
+  // If loading, ignore clicks
+  if (ttsLoading.value === langCode) return
   // If already playing this language, stop it
   if (ttsPlaying.value === langCode && ttsAudio) {
     ttsAudio.pause()
@@ -355,7 +632,8 @@ async function playTts(langCode: string) {
     ttsAudio.pause()
     ttsAudio = null
   }
-  ttsPlaying.value = langCode
+  ttsPlaying.value = null
+  ttsLoading.value = langCode
   try {
     const result = await $fetch<{ audioContent: string }>('/api/tts', {
       method: 'POST',
@@ -363,11 +641,14 @@ async function playTts(langCode: string) {
     })
     const audio = new Audio(`data:audio/mpeg;base64,${result.audioContent}`)
     ttsAudio = audio
+    ttsLoading.value = null
+    ttsPlaying.value = langCode
     audio.onended = () => { ttsPlaying.value = null; ttsAudio = null }
     audio.onerror = () => { ttsPlaying.value = null; ttsAudio = null }
     await audio.play()
   } catch (e) {
     console.error('TTS failed', e)
+    ttsLoading.value = null
     ttsPlaying.value = null
     ttsAudio = null
   }
@@ -380,7 +661,43 @@ const savedSource = useCookie<{ code: string; text: string }>('last-source', {
   maxAge: 60 * 60 * 24 * 365,
 })
 
+const translationApi = useCookie<'deepl' | 'google'>('translation-api', {
+  default: () => 'deepl',
+  watch: true,
+  maxAge: 60 * 60 * 24 * 365,
+})
+
+function translateEndpoint() {
+  return translationApi.value === 'deepl' ? '/api/translate-deepl' : '/api/translate'
+}
+
+function toggleTranslationApi() {
+  translationApi.value = translationApi.value === 'deepl' ? 'google' : 'deepl'
+  // Retranslate with new API
+  const src = savedSource.value
+  if (src?.text.trim()) {
+    lastTranslatedText = ''
+    triggerTranslation(src.code, src.text)
+  }
+}
+
 let lastTranslatedText = ''
+
+// Cache last translations in localStorage to avoid API call on reload
+const TRANSLATIONS_CACHE_KEY = 'poly-last-translations'
+
+function loadTranslationsCache(): { sourceCode: string; sourceText: string; translations: Record<string, string> } | null {
+  if (import.meta.server) return null
+  try {
+    const raw = localStorage.getItem(TRANSLATIONS_CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function persistTranslationsCache(sourceCode: string, sourceText: string, translations: Record<string, string>) {
+  if (import.meta.server) return
+  localStorage.setItem(TRANSLATIONS_CACHE_KEY, JSON.stringify({ sourceCode, sourceText, translations }))
+}
 
 function onLangInput(code: string, value: string) {
   langTexts[code] = value
@@ -410,47 +727,82 @@ async function triggerTranslation(sourceCode: string, text: string) {
     return
   }
   const hasAutoLang = selectedLanguages.value.some(l => l.language === 'auto')
-  const targetLanguages = selectedLanguages.value
+  const allTargets = selectedLanguages.value
     .map(l => l.language)
     .filter(c => c !== sourceCode && c !== 'auto')
+
+  // Split into primary and fallback targets
+  const primaryTargets: string[] = []
+  const fallbackTargets: string[] = []
+  for (const code of allTargets) {
+    const engine = getLangEngine(sourceCode, code)
+    if (engine === 'primary') primaryTargets.push(code)
+    else if (engine === 'fallback') fallbackTargets.push(code)
+  }
 
   // If auto/detect is selected and we have a detected language, translate into it too
   if (sourceCode !== 'auto' && hasAutoLang && detectedLangCode.value) {
     if (detectedLangCode.value === sourceCode) {
-      // Detected lang same as source, just copy text
       langTexts['auto'] = text
-    } else if (!targetLanguages.includes(detectedLangCode.value)) {
-      targetLanguages.push(detectedLangCode.value)
+    } else if (!primaryTargets.includes(detectedLangCode.value) && !fallbackTargets.includes(detectedLangCode.value)) {
+      const engine = getLangEngine(sourceCode, detectedLangCode.value)
+      if (engine === 'fallback') fallbackTargets.push(detectedLangCode.value)
+      else primaryTargets.push(detectedLangCode.value)
     }
   }
 
-  if (!targetLanguages.length) return
+  if (!primaryTargets.length && !fallbackTargets.length) return
 
   isTranslating.value = true
+  const allTranslations: Record<string, string> = {}
   try {
-    const result = await $fetch<{
-      sourceLanguage: string
-      translations: Record<string, string>
-    }>('/api/translate', {
-      method: 'POST',
-      body: { text, sourceLanguage: sourceCode === 'auto' ? '' : sourceCode, targetLanguages },
-    })
-    for (const [code, translated] of Object.entries(result.translations)) {
-      langTexts[code] = translated
+    // Translate with primary engine
+    if (primaryTargets.length) {
+      const result = await $fetch<{
+        sourceLanguage: string
+        translations: Record<string, string>
+      }>(translateEndpoint(), {
+        method: 'POST',
+        body: { text, sourceLanguage: sourceCode === 'auto' ? '' : sourceCode, targetLanguages: primaryTargets },
+      })
+      for (const [code, translated] of Object.entries(result.translations)) {
+        langTexts[code] = translated
+        allTranslations[code] = translated
+      }
+      if (sourceCode === 'auto' && result.sourceLanguage) {
+        detectedLangCode.value = result.sourceLanguage
+      }
     }
+
+    // Translate with fallback engine
+    if (fallbackTargets.length) {
+      const fbEndpoint = fallbackEndpoint()
+      const result = await $fetch<{
+        sourceLanguage: string
+        translations: Record<string, string>
+      }>(fbEndpoint, {
+        method: 'POST',
+        body: { text, sourceLanguage: sourceCode === 'auto' ? '' : sourceCode, targetLanguages: fallbackTargets },
+      })
+      for (const [code, translated] of Object.entries(result.translations)) {
+        langTexts[code] = translated
+        allTranslations[code] = translated
+      }
+    }
+
     // Map detected language translation to the auto card
-    if (sourceCode !== 'auto' && hasAutoLang && detectedLangCode.value && result.translations[detectedLangCode.value]) {
-      langTexts['auto'] = result.translations[detectedLangCode.value]!
+    if (sourceCode !== 'auto' && hasAutoLang && detectedLangCode.value && allTranslations[detectedLangCode.value]) {
+      langTexts['auto'] = allTranslations[detectedLangCode.value]!
     }
-    // If auto-detect, update the detect card text with source info
-    if (sourceCode === 'auto' && result.sourceLanguage) {
-      detectedLangCode.value = result.sourceLanguage
-    }
-    addToHistory(sourceCode === 'auto' ? (result.sourceLanguage || 'auto') : sourceCode, text, result.translations)
+    addToHistory(sourceCode === 'auto' ? (detectedLangCode.value || 'auto') : sourceCode, text, allTranslations)
+    persistTranslationsCache(sourceCode === 'auto' ? (detectedLangCode.value || 'auto') : sourceCode, text, allTranslations)
   } catch (e) {
     console.error('Translation failed', e)
   } finally {
     isTranslating.value = false
+    // Fetch romanizations for non-Latin scripts
+    if (romanizeTimer) clearTimeout(romanizeTimer)
+    romanizeTimer = setTimeout(fetchRomanizations, 300)
   }
 }
 
@@ -490,8 +842,15 @@ const dragOverLang = ref<string | null>(null)
 let edgeSwitchTimer: ReturnType<typeof setTimeout> | null = null
 const EDGE_ZONE = 40
 
-function onDragStart(code: string) {
+function onDragStart(code: string, e?: DragEvent) {
   draggingLang.value = code
+  if (e?.dataTransfer) {
+    const card = (e.target as HTMLElement).closest('.lang-card') as HTMLElement | null
+    if (card) {
+      const rect = card.getBoundingClientRect()
+      e.dataTransfer.setDragImage(card, e.clientX - rect.left, e.clientY - rect.top)
+    }
+  }
 }
 
 function onDragEnd() {
@@ -651,15 +1010,18 @@ const filteredLanguages = computed(() => {
   return results
 })
 
-async function selectLanguage(lang: { language: string; name: string }) {
+async function selectLanguage(lang: { language: string; name: string; gt: boolean; dl: boolean }) {
   selectedLanguages.value.push(lang)
   closeModal()
   // Don't try to translate for detect language
   if (lang.language === 'auto') return
   if (savedSource.value && savedSource.value.text.trim()) {
-    const srcCode = savedSource.value.code === 'auto' ? '' : savedSource.value.code
+    const srcCode = savedSource.value.code === 'auto' ? (detectedLangCode.value || '') : savedSource.value.code
+    const engine = getLangEngine(srcCode, lang.language)
+    if (engine === 'none') return
+    const endpoint = engine === 'fallback' ? fallbackEndpoint() : translateEndpoint()
     try {
-      const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
+      const result = await $fetch<{ translations: Record<string, string> }>(endpoint, {
         method: 'POST',
         body: { text: savedSource.value.text, sourceLanguage: srcCode, targetLanguages: [lang.language] },
       })
@@ -748,20 +1110,93 @@ onMounted(async () => {
   }
   const src = savedSource.value ?? DEFAULT_SOURCE
   langTexts[src.code] = src.text
-  const targets = selectedLanguages.value
-    .map(l => l.language)
-    .filter(c => c !== src.code && c !== 'auto')
-  if (!src.text.trim() || !targets.length) return
-  try {
-    const result = await $fetch<{ sourceLanguage: string; translations: Record<string, string> }>('/api/translate', {
-      method: 'POST',
-      body: { text: src.text, sourceLanguage: src.code === 'auto' ? '' : src.code, targetLanguages: targets },
-    })
-    for (const [code, translated] of Object.entries(result.translations)) {
+
+  // Try to restore from cache first
+  const cache = loadTranslationsCache()
+  if (cache && cache.sourceText === src.text && cache.sourceCode === src.code) {
+    for (const [code, translated] of Object.entries(cache.translations)) {
       langTexts[code] = translated
     }
-    if (src.code === 'auto' && result.sourceLanguage) {
-      detectedLangCode.value = result.sourceLanguage
+    lastTranslatedText = src.text.trim()
+    // Translate any newly added languages not in the cache
+    const cachedCodes = new Set(Object.keys(cache.translations))
+    const missingPrimary: string[] = []
+    const missingFallback: string[] = []
+    for (const l of selectedLanguages.value) {
+      const c = l.language
+      if (c === src.code || c === 'auto' || cachedCodes.has(c)) continue
+      const engine = getLangEngine(src.code, c)
+      if (engine === 'primary') missingPrimary.push(c)
+      else if (engine === 'fallback') missingFallback.push(c)
+    }
+    const srcLang = src.code === 'auto' ? '' : src.code
+    const newTranslations: Record<string, string> = {}
+    if (missingPrimary.length) {
+      try {
+        const result = await $fetch<{ translations: Record<string, string> }>(translateEndpoint(), {
+          method: 'POST',
+          body: { text: src.text, sourceLanguage: srcLang, targetLanguages: missingPrimary },
+        })
+        for (const [code, translated] of Object.entries(result.translations)) {
+          langTexts[code] = translated
+          newTranslations[code] = translated
+        }
+      } catch (e) {
+        console.error('Translation for missing languages failed', e)
+      }
+    }
+    if (missingFallback.length) {
+      try {
+        const result = await $fetch<{ translations: Record<string, string> }>(fallbackEndpoint(), {
+          method: 'POST',
+          body: { text: src.text, sourceLanguage: srcLang, targetLanguages: missingFallback },
+        })
+        for (const [code, translated] of Object.entries(result.translations)) {
+          langTexts[code] = translated
+          newTranslations[code] = translated
+        }
+      } catch (e) {
+        console.error('Fallback translation for missing languages failed', e)
+      }
+    }
+    if (Object.keys(newTranslations).length) {
+      persistTranslationsCache(src.code, src.text, { ...cache.translations, ...newTranslations })
+    }
+    return
+  }
+
+  const allTargets = selectedLanguages.value
+    .map(l => l.language)
+    .filter(c => c !== src.code && c !== 'auto')
+  const initPrimary: string[] = []
+  const initFallback: string[] = []
+  for (const c of allTargets) {
+    const engine = getLangEngine(src.code, c)
+    if (engine === 'primary') initPrimary.push(c)
+    else if (engine === 'fallback') initFallback.push(c)
+  }
+  if (!src.text.trim() || (!initPrimary.length && !initFallback.length)) return
+  try {
+    if (initPrimary.length) {
+      const result = await $fetch<{ sourceLanguage: string; translations: Record<string, string> }>(translateEndpoint(), {
+        method: 'POST',
+        body: { text: src.text, sourceLanguage: src.code === 'auto' ? '' : src.code, targetLanguages: initPrimary },
+      })
+      for (const [code, translated] of Object.entries(result.translations)) {
+        langTexts[code] = translated
+      }
+      if (src.code === 'auto' && result.sourceLanguage) {
+        detectedLangCode.value = result.sourceLanguage
+      }
+    }
+    if (initFallback.length) {
+      const result = await $fetch<{ sourceLanguage: string; translations: Record<string, string> }>(fallbackEndpoint(), {
+        method: 'POST',
+        body: { text: src.text, sourceLanguage: src.code === 'auto' ? '' : src.code, targetLanguages: initFallback },
+      })
+      for (const [code, translated] of Object.entries(result.translations)) {
+        langTexts[code] = translated
+      }
     }
   } catch (e) {
     console.error('Initial translation failed', e)
@@ -821,6 +1256,72 @@ function toggleBookmarks() {
 
 function toggleHistory() {
   currentView.value = currentView.value === 'history' ? 'translate' : 'history'
+}
+
+const filteredHistory = computed(() => {
+  const q = historySearch.value.toLowerCase().trim()
+  if (!q) return history.value
+  return history.value.filter(entry =>
+    entry.sourceText.toLowerCase().includes(q) ||
+    Object.values(entry.translations).some(t => t.toLowerCase().includes(q))
+  )
+})
+
+const filteredBookmarks = computed(() => {
+  const q = bookmarksSearch.value.toLowerCase().trim()
+  if (!q) return savedPhrases.value
+  return savedPhrases.value.filter(phrase =>
+    phrase.sourceText.toLowerCase().includes(q) ||
+    Object.values(phrase.translations).some(t => t.toLowerCase().includes(q))
+  )
+})
+
+// Clear confirmation modal
+const showClearConfirm = ref<'history' | 'bookmarks' | null>(null)
+
+function closeClearConfirm() {
+  showClearConfirm.value = null
+}
+
+function confirmClear() {
+  if (showClearConfirm.value === 'history') {
+    history.value = []
+    persistHistory()
+  } else if (showClearConfirm.value === 'bookmarks') {
+    savedPhrases.value = []
+    persistPhrases()
+  }
+  showClearConfirm.value = null
+}
+
+// Back button closes clear confirm modal
+if (!import.meta.server) {
+  watch(showClearConfirm, (val) => {
+    if (val) {
+      window.history.pushState({ clearConfirm: true }, '')
+      const handler = () => {
+        if (showClearConfirm.value) {
+          showClearConfirm.value = null
+        }
+      }
+      window.addEventListener('popstate', handler, { once: true })
+    }
+  })
+}
+
+// Back button returns to translate from other views
+if (!import.meta.server) {
+  watch(currentView, (val, oldVal) => {
+    if (val !== 'translate' && oldVal === 'translate') {
+      window.history.pushState({ view: val }, '')
+      const handler = () => {
+        if (currentView.value !== 'translate') {
+          currentView.value = 'translate'
+        }
+      }
+      window.addEventListener('popstate', handler, { once: true })
+    }
+  })
 }
 
 // Translation history (localStorage)
@@ -888,7 +1389,7 @@ watch([currentView, () => selectedLanguages.value.length], async ([view]) => {
     })
     if (!missing.length) continue
     try {
-      const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
+      const result = await $fetch<{ translations: Record<string, string> }>(translateEndpoint(), {
         method: 'POST',
         body: { text: phrase.sourceText, sourceLanguage: phrase.sourceLang, targetLanguages: missing },
       })
@@ -935,7 +1436,7 @@ async function loadContextLabels(langCodes: string[]) {
   const words = ['Definitions', 'Examples', 'Synonyms']
   for (const word of words) {
     try {
-      const result = await $fetch<{ translations: Record<string, string> }>('/api/translate', {
+      const result = await $fetch<{ translations: Record<string, string> }>(translateEndpoint(), {
         method: 'POST',
         body: { text: word, sourceLanguage: 'en', targetLanguages: missing },
       })
@@ -954,7 +1455,8 @@ async function loadContextLabels(langCodes: string[]) {
 
 const contextLanguages = computed(() => {
   if (!contextData.value) return []
-  return Object.keys(contextData.value)
+  const available = new Set(Object.keys(contextData.value))
+  return displayLanguages.value.map(l => l.language).filter(c => available.has(c))
 })
 
 const contextPages = computed(() => {
@@ -1083,6 +1585,223 @@ async function fetchContext() {
     console.error('Context fetch failed', e)
   } finally {
     isLoadingContext.value = false
+  }
+}
+
+// ── Quiz Feature ──
+interface SrsCard {
+  key: string // "fromLang:toLang:sourceText"
+  interval: number // days until next review
+  ease: number // ease factor (2.5 default)
+  dueAt: number // timestamp when due
+  reps: number // successful consecutive reps
+}
+
+const SRS_COOKIE_KEY = 'poly-srs-data'
+const srsData = useCookie<Record<string, SrsCard>>(SRS_COOKIE_KEY, {
+  default: () => ({}),
+  watch: true,
+  maxAge: 60 * 60 * 24 * 365 * 5,
+})
+
+function srsKey(from: string, to: string, text: string): string {
+  return `${from}:${to}:${text}`
+}
+
+function getSrsCard(key: string): SrsCard {
+  return srsData.value[key] || { key, interval: 0, ease: 2.5, dueAt: 0, reps: 0 }
+}
+
+function updateSrs(key: string, correct: boolean) {
+  const card = getSrsCard(key)
+  if (correct) {
+    card.reps++
+    if (card.reps === 1) card.interval = 1
+    else if (card.reps === 2) card.interval = 3
+    else card.interval = Math.round(card.interval * card.ease)
+    card.ease = Math.max(1.3, card.ease + 0.1)
+  } else {
+    card.reps = 0
+    card.interval = 0
+    card.ease = Math.max(1.3, card.ease - 0.2)
+  }
+  card.dueAt = Date.now() + card.interval * 24 * 60 * 60 * 1000
+  srsData.value = { ...srsData.value, [key]: card }
+}
+
+function getSrsMastery(from: string, to: string, text: string): number {
+  const card = getSrsCard(srsKey(from, to, text))
+  // Mastery: 0-1 based on reps. 5 reps = mastered
+  return Math.min(1, card.reps / 5)
+}
+
+// Quiz state
+const quizPhase = ref<'setup' | 'active' | 'results'>('setup')
+const quizFromLang = ref('')
+const quizToLang = ref('')
+const quizTermCount = ref(10)
+const quizIncludePhrases = ref(false)
+const quizAnswer = ref('')
+const quizShowResult = ref(false)
+const quizResultClass = ref('')
+const quizResultLabel = ref('')
+const quizAccentNote = ref('')
+const quizCurrentIdx = ref(0)
+const quizCorrectCount = ref(0)
+const quizAnswerInput = ref<HTMLInputElement | null>(null)
+
+interface QuizItem {
+  prompt: string
+  answer: string
+  srsKey: string
+  wasCorrect: boolean
+  wasSkipped: boolean
+  userAnswer: string
+}
+
+const quizItems = ref<QuizItem[]>([])
+
+// Languages available for quizzing (only those present in saved phrases)
+const quizAvailableLangs = computed(() => {
+  const codes = new Set<string>()
+  for (const phrase of savedPhrases.value) {
+    codes.add(phrase.sourceLang)
+    for (const code of Object.keys(phrase.translations)) {
+      codes.add(code)
+    }
+  }
+  return [...codes].sort((a, b) => getLanguageName(a).localeCompare(getLanguageName(b)))
+})
+
+watch(quizAvailableLangs, (langs) => {
+  if (langs.length >= 2) {
+    if (!quizFromLang.value || !langs.includes(quizFromLang.value)) quizFromLang.value = langs[0]!
+    if (!quizToLang.value || !langs.includes(quizToLang.value)) quizToLang.value = langs[1] ?? langs[0]!
+  }
+}, { immediate: true })
+
+function isPhrase(text: string): boolean {
+  // A "phrase" has multiple clauses/sentences or is very long
+  // "Multiple worded vocabulary" (e.g. "ice cream") is NOT a phrase
+  return text.includes('.') || text.includes('!') || text.includes('?') || text.includes(',') || text.length > 60
+}
+
+function normalizeForCompare(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function startQuiz() {
+  if (quizFromLang.value === quizToLang.value) return
+  const from = quizFromLang.value
+  const to = quizToLang.value
+  const now = Date.now()
+
+  // Build all possible items from saved phrases
+  const candidates: { prompt: string; answer: string; srsKey: string; dueAt: number }[] = []
+  for (const phrase of savedPhrases.value) {
+    let fromText = ''
+    let toText = ''
+    if (phrase.sourceLang === from) fromText = phrase.sourceText
+    else if (phrase.translations[from]) fromText = phrase.translations[from]!
+    if (phrase.sourceLang === to) toText = phrase.sourceText
+    else if (phrase.translations[to]) toText = phrase.translations[to]!
+
+    if (!fromText?.trim() || !toText?.trim()) continue
+    if (!quizIncludePhrases.value && isPhrase(fromText)) continue
+
+    const key = srsKey(from, to, fromText)
+    const card = getSrsCard(key)
+    candidates.push({ prompt: fromText, answer: toText, srsKey: key, dueAt: card.dueAt })
+  }
+
+  // Sort by SRS: due items first (overdue = earliest dueAt), then new items (dueAt=0)
+  candidates.sort((a, b) => {
+    const aOverdue = a.dueAt <= now ? 0 : 1
+    const bOverdue = b.dueAt <= now ? 0 : 1
+    if (aOverdue !== bOverdue) return aOverdue - bOverdue
+    return a.dueAt - b.dueAt
+  })
+
+  const selected = candidates.slice(0, quizTermCount.value)
+  // Shuffle the selected items
+  for (let i = selected.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[selected[i], selected[j]] = [selected[j]!, selected[i]!]
+  }
+
+  quizItems.value = selected.map(c => ({
+    prompt: c.prompt,
+    answer: c.answer,
+    srsKey: c.srsKey,
+    wasCorrect: false,
+    wasSkipped: false,
+    userAnswer: '',
+  }))
+
+  quizCurrentIdx.value = 0
+  quizCorrectCount.value = 0
+  quizAnswer.value = ''
+  quizShowResult.value = false
+  quizPhase.value = quizItems.value.length ? 'active' : 'setup'
+  nextTick(() => quizAnswerInput.value?.focus())
+}
+
+function submitQuizAnswer() {
+  if (quizShowResult.value) return
+  const item = quizItems.value[quizCurrentIdx.value]
+  if (!item) return
+
+  item.userAnswer = quizAnswer.value.trim()
+  const normalizedUser = normalizeForCompare(item.userAnswer)
+  const normalizedAnswer = normalizeForCompare(item.answer)
+
+  if (normalizedUser === normalizedAnswer) {
+    // Check if accents differ
+    const userLower = item.userAnswer.toLowerCase().trim()
+    const answerLower = item.answer.toLowerCase().trim()
+    if (userLower !== answerLower) {
+      quizResultClass.value = 'accent-warn'
+      quizResultLabel.value = 'Correct! But check the accents:'
+      quizAccentNote.value = `You typed: ${item.userAnswer}`
+    } else {
+      quizResultClass.value = 'correct'
+      quizResultLabel.value = 'Correct!'
+      quizAccentNote.value = ''
+    }
+    item.wasCorrect = true
+    quizCorrectCount.value++
+    updateSrs(item.srsKey, true)
+  } else {
+    quizResultClass.value = 'wrong'
+    quizResultLabel.value = 'Incorrect'
+    quizAccentNote.value = ''
+    item.wasCorrect = false
+    updateSrs(item.srsKey, false)
+  }
+
+  quizShowResult.value = true
+}
+
+function skipQuizItem() {
+  const item = quizItems.value[quizCurrentIdx.value]
+  if (item) {
+    item.wasSkipped = true
+    item.userAnswer = ''
+  }
+  quizShowResult.value = true
+  quizResultClass.value = 'skipped'
+  quizResultLabel.value = 'Skipped'
+  quizAccentNote.value = ''
+}
+
+function nextQuizItem() {
+  if (quizCurrentIdx.value < quizItems.value.length - 1) {
+    quizCurrentIdx.value++
+    quizAnswer.value = ''
+    quizShowResult.value = false
+    nextTick(() => quizAnswerInput.value?.focus())
+  } else {
+    quizPhase.value = 'results'
   }
 }
 
@@ -1277,7 +1996,7 @@ html, body {
   color: var(--accent);
 }
 
-.tts-btn {
+.copy-btn {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -1288,9 +2007,46 @@ html, body {
   line-height: 1;
 }
 
+.copy-btn:active,
+.copy-btn.copied {
+  color: var(--accent);
+}
+
+.tts-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
 .tts-btn:active,
 .tts-btn.playing {
   color: var(--accent);
+}
+
+.tts-btn.loading {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.7;
+}
+
+.tts-btn:disabled {
+  cursor: default;
+}
+
+.tts-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
 }
 
 .source-indicator {
@@ -1347,6 +2103,62 @@ html, body {
   font-family: inherit;
   background: var(--bg);
   color: var(--text);
+}
+
+.textarea-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
+.textarea-wrapper .lang-textarea {
+  flex: 1;
+}
+
+.translate-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.45;
+  font-size: 14px;
+  padding: 16px;
+}
+
+.engine-badges {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.engine-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  opacity: 0.3;
+  color: #fff;
+  transition: opacity 0.2s;
+}
+
+.engine-badge.active {
+  opacity: 0.85;
+}
+
+.engine-badge.gt {
+  background: #4285f4;
+}
+
+.engine-badge.dl {
+  background: #042B48;
 }
 
 .tab-indicator {
@@ -1475,10 +2287,41 @@ html, body {
   padding: 14px 16px;
   border-bottom: 1px solid var(--border-light);
   cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .language-item:active {
   background: var(--bg-hover);
+}
+
+.language-item-name {
+  flex: 1;
+}
+
+.language-item-badges {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.lang-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+.lang-badge.gt {
+  background: #4285f4;
+  color: #fff;
+}
+
+.lang-badge.dl {
+  background: #042B48;
+  color: #fff;
 }
 
 .bookmarks-view {
@@ -1555,6 +2398,17 @@ html, body {
   left: 12px;
 }
 
+.api-toggle-btn {
+  position: absolute;
+  left: 56px;
+}
+
+.api-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
 .context-btn.loading {
   pointer-events: none;
 }
@@ -1613,5 +2467,444 @@ html, body {
   border-radius: 16px;
   font-size: 13px;
 }
+
+.clear-btn {
+  position: absolute;
+  right: 56px;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-modal {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 24px;
+  min-width: 260px;
+  text-align: center;
+}
+
+.confirm-modal p {
+  margin: 0 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.confirm-cancel,
+.confirm-delete {
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+}
+
+.confirm-cancel {
+  background: var(--bg-secondary);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.confirm-delete {
+  background: #e00;
+  color: #fff;
+}
+
+/* Missing utility classes */
+.romanization {
+  padding: 4px 12px 2px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.3;
+  max-height: 40px;
+  overflow-y: auto;
+}
+
+.textarea-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 8px 4px;
+  min-height: 22px;
+}
+
+.char-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.copyall-btn {
+  position: absolute;
+  right: 56px;
+}
+
+.copyall-btn.copied {
+  color: var(--accent);
+}
+
+.list-search-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.list-search-bar .search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Quiz nav button */
+.quiz-nav-btn {
+  position: absolute;
+  left: 100px;
+}
+
+/* SRS progress bars on saved phrases */
+.srs-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.srs-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+/* Quiz view */
+.quiz-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.quiz-setup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.quiz-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.quiz-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.quiz-field label {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.quiz-select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.quiz-toggle-field {
+  justify-content: space-between;
+}
+
+.quiz-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  padding: 0;
+}
+
+.quiz-toggle.on {
+  background: var(--accent);
+}
+
+.quiz-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.quiz-toggle.on .quiz-toggle-knob {
+  transform: translateX(20px);
+}
+
+.quiz-start-btn {
+  margin-top: 12px;
+  padding: 12px 32px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quiz-start-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.quiz-active {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+}
+
+.quiz-progress-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.quiz-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.quiz-counter {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.quiz-prompt {
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  word-break: break-word;
+}
+
+.quiz-input {
+  width: 100%;
+  max-width: 300px;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 18px;
+  font-family: inherit;
+  text-align: center;
+  outline: none;
+}
+
+.quiz-input:focus {
+  border-color: var(--accent);
+}
+
+.quiz-result {
+  text-align: center;
+  padding: 12px;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.quiz-result.correct {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.quiz-result.wrong {
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.quiz-result.accent-warn {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+}
+
+.quiz-result.skipped {
+  background: rgba(158, 158, 158, 0.15);
+  color: var(--text-muted);
+}
+
+.quiz-result-label {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.quiz-accent-note {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.quiz-correct-answer {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.quiz-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.quiz-submit-btn {
+  padding: 10px 28px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quiz-skip-btn {
+  padding: 10px 28px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.quiz-results {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.quiz-score {
+  font-size: 36px;
+  font-weight: 800;
+}
+
+.quiz-score-pct {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.quiz-results-list {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quiz-result-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.quiz-result-row.correct {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.quiz-result-row.wrong {
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.quiz-result-row.skipped {
+  background: rgba(158, 158, 158, 0.08);
+}
+
+.quiz-result-prompt {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-result-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.quiz-result-answer {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-result-user {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.quiz-result-icon {
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.quiz-result-row.correct .quiz-result-icon { color: #4caf50; }
+.quiz-result-row.wrong .quiz-result-icon { color: #f44336; }
+.quiz-result-row.skipped .quiz-result-icon { color: var(--text-muted); }
 </style>
 

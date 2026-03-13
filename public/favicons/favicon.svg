@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><linearGradient id="g20" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a29bfe"/><stop offset="100%" stop-color="#6c5ce7"/></linearGradient></defs>
+  <rect width="64" height="64" rx="12" fill="url(#g20)"/>
+  <text x="6" y="46" font-family="serif" font-size="40" font-weight="bold" fill="#fff" opacity="0.9">À</text>
+  <text x="26" y="52" font-family="serif" font-size="34" fill="#ffeaa7" opacity="0.9">あ</text>
+</svg>

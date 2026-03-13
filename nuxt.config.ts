@@ -10,6 +10,7 @@ export default defineNuxtConfig({
     googleTranslateApiKey: process.env.NUXT_PUBLIC_GOOGLE_CLIENT_ID,
     googleGeminiApiKey: process.env.NUXT_PUBLIC_GOOGLE_GEMINI,
     speechifyApiToken: process.env.SPEECHIFY_API_TOKEN,
+    deeplApiKey: process.env.DEEPL_API_KEY,
   },
   runtimeConfigDefaults: {
     public: {
