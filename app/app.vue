@@ -201,87 +201,6 @@
         </div>
       </template>
 
-      <!-- Quiz View -->
-      <template v-if="currentView === 'quiz'">
-        <div class="quiz-view">
-          <!-- Setup screen -->
-          <div v-if="quizPhase === 'setup'" class="quiz-setup">
-            <h2 class="quiz-title">Quiz</h2>
-            <div class="quiz-field">
-              <label>From</label>
-              <select v-model="quizFromLang" class="quiz-select">
-                <option v-for="code in quizAvailableLangs" :key="code" :value="code">{{ getLanguageName(code) }}</option>
-              </select>
-            </div>
-            <div class="quiz-field">
-              <label>To</label>
-              <select v-model="quizToLang" class="quiz-select">
-                <option v-for="code in quizAvailableLangs" :key="code" :value="code">{{ getLanguageName(code) }}</option>
-              </select>
-            </div>
-            <div class="quiz-field">
-              <label>Terms</label>
-              <input v-model.number="quizTermCount" type="number" min="1" max="50" class="quiz-select" />
-            </div>
-            <div class="quiz-field quiz-toggle-field">
-              <label>Include phrases</label>
-              <button class="quiz-toggle" :class="{ on: quizIncludePhrases }" @click="quizIncludePhrases = !quizIncludePhrases">
-                <span class="quiz-toggle-knob" />
-              </button>
-            </div>
-            <button class="quiz-start-btn" :disabled="quizFromLang === quizToLang || !quizFromLang || !quizToLang" @click="startQuiz">Start Quiz</button>
-          </div>
-
-          <!-- Active quiz -->
-          <div v-else-if="quizPhase === 'active'" class="quiz-active">
-            <div class="quiz-progress-bar">
-              <div class="quiz-progress-fill" :style="{ width: `${((quizCurrentIdx + 1) / quizItems.length) * 100}%` }" />
-            </div>
-            <div class="quiz-counter">{{ quizCurrentIdx + 1 }} / {{ quizItems.length }}</div>
-            <div class="quiz-prompt">{{ quizItems[quizCurrentIdx]?.prompt }}</div>
-            <input
-              v-if="!quizShowResult"
-              ref="quizAnswerInput"
-              v-model="quizAnswer"
-              type="text"
-              class="quiz-input"
-              :placeholder="`Type in ${getLanguageName(quizToLang)}...`"
-              @keydown.enter="submitQuizAnswer"
-            />
-            <div v-if="quizShowResult" class="quiz-result" :class="quizResultClass">
-              <div class="quiz-result-label">{{ quizResultLabel }}</div>
-              <div v-if="quizAccentNote" class="quiz-accent-note">{{ quizAccentNote }}</div>
-              <div class="quiz-correct-answer">{{ quizItems[quizCurrentIdx]?.answer }}</div>
-            </div>
-            <div class="quiz-actions">
-              <button v-if="!quizShowResult" class="quiz-skip-btn" @click="skipQuizItem">Skip</button>
-              <button v-if="!quizShowResult" class="quiz-submit-btn" @click="submitQuizAnswer">Submit</button>
-              <button v-else class="quiz-submit-btn" @click="nextQuizItem">Next</button>
-            </div>
-          </div>
-
-          <!-- Results screen -->
-          <div v-else-if="quizPhase === 'results'" class="quiz-results">
-            <h2 class="quiz-title">Results</h2>
-            <div class="quiz-score">{{ quizCorrectCount }} / {{ quizItems.length }}</div>
-            <div class="quiz-score-pct">{{ Math.round((quizCorrectCount / quizItems.length) * 100) }}%</div>
-            <div class="quiz-results-list">
-              <div v-for="(item, i) in quizItems" :key="i" class="quiz-result-row" :class="item.wasCorrect ? 'correct' : item.wasSkipped ? 'skipped' : 'wrong'">
-                <span class="quiz-result-prompt">{{ item.prompt }}</span>
-                <span class="quiz-result-arrow">→</span>
-                <span class="quiz-result-answer">{{ item.answer }}</span>
-                <span v-if="item.userAnswer && !item.wasCorrect && !item.wasSkipped" class="quiz-result-user">({{ item.userAnswer }})</span>
-                <span class="quiz-result-icon">{{ item.wasCorrect ? '✓' : item.wasSkipped ? '–' : '✗' }}</span>
-              </div>
-            </div>
-            <div class="quiz-actions">
-              <button class="quiz-submit-btn" @click="quizPhase = 'setup'">Quiz Again</button>
-              <button class="quiz-skip-btn" @click="currentView = 'bookmarks'">Back</button>
-            </div>
-          </div>
-        </div>
-      </template>
-
       <!-- Context View -->
       <template v-if="currentView === 'context'">
         <div class="bookmarks-view" v-if="!contextData || !Object.keys(contextData).length">
@@ -352,48 +271,45 @@
 
       <nav class="bottom-nav">
         <div class="nav-center">
-          <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" aria-label="History">
+          <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" aria-label="History" title="History">
             <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'history' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </button>
 
-          <button v-if="currentView === 'translate'" class="add-btn" @click="showModal = true" aria-label="Add language">+</button>
-          <button v-else class="add-btn" @click="currentView = 'translate'" aria-label="Back to translate">
+          <button v-if="currentView === 'translate'" class="add-btn" @click="showModal = true" aria-label="Add language" title="Add language">+</button>
+          <button v-else class="add-btn" @click="currentView = 'translate'" aria-label="Back to translate" title="Translate">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           </button>
 
-          <button class="nav-btn" :class="{ active: currentView === 'bookmarks' }" @click="toggleBookmarks" aria-label="Bookmarks">
+          <button class="nav-btn" :class="{ active: currentView === 'bookmarks' }" @click="toggleBookmarks" aria-label="Bookmarks" title="Bookmarks">
             <svg width="22" height="22" viewBox="0 0 24 24" :fill="currentView === 'bookmarks' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
           </button>
         </div>
 
         <!-- Right side buttons -->
-        <button v-if="currentView === 'translate'" class="nav-btn save-btn" @click="savePhrase" aria-label="Save phrase">
+        <button v-if="currentView === 'translate'" class="nav-btn save-btn" @click="savePhrase" aria-label="Save phrase" title="Save phrase">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
-        <button v-if="currentView === 'translate'" class="nav-btn copyall-btn" :class="{ copied: copiedAll }" @click="copyAll" aria-label="Copy all translations">
+        <button v-if="currentView === 'translate'" class="nav-btn copyall-btn" :class="{ copied: copiedAll }" @click="copyAll" aria-label="Copy all translations" title="Copy all">
           <svg v-if="!copiedAll" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
-        <button class="nav-btn context-btn" :class="{ loading: isLoadingContext, active: currentView === 'context' }" @click="fetchContext" aria-label="Get context" :disabled="isLoadingContext">
+        <button class="nav-btn context-btn" :class="{ loading: isLoadingContext, active: currentView === 'context' }" @click="fetchContext" aria-label="Get context" :disabled="isLoadingContext" title="Context / Info">
           <svg v-if="!isLoadingContext" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           <span v-else class="spinner"></span>
         </button>
-        <button v-if="currentView !== 'bookmarks' && currentView !== 'quiz'" class="nav-btn api-toggle-btn" @click="toggleTranslationApi" :aria-label="`Switch to ${translationApi === 'deepl' ? 'Google' : 'DeepL'}`">
+        <button v-if="currentView !== 'bookmarks'" class="nav-btn api-toggle-btn" @click="toggleTranslationApi" :aria-label="`Switch to ${translationApi === 'deepl' ? 'Google' : 'DeepL'}`" :title="`Engine: ${translationApi === 'deepl' ? 'DeepL' : 'Google Translate'}`">
           <span class="api-label">{{ translationApi === 'deepl' ? 'DL' : 'GT' }}</span>
         </button>
-        <button v-if="currentView === 'history'" class="nav-btn save-btn" @click="exportHistoryCsv" aria-label="Export history CSV">
+        <button v-if="currentView === 'history'" class="nav-btn save-btn" @click="exportHistoryCsv" aria-label="Export history CSV" title="Export CSV">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button v-if="currentView === 'history' && history.length" class="nav-btn clear-btn" @click="showClearConfirm = 'history'" aria-label="Clear history">
+        <button v-if="currentView === 'history' && history.length" class="nav-btn clear-btn" @click="showClearConfirm = 'history'" aria-label="Clear history" title="Clear history">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
-        <button v-if="currentView === 'bookmarks'" class="nav-btn save-btn" @click="exportBookmarksCsv" aria-label="Export bookmarks CSV">
+        <button v-if="currentView === 'bookmarks'" class="nav-btn save-btn" @click="exportBookmarksCsv" aria-label="Export bookmarks CSV" title="Export CSV">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button v-if="(currentView === 'bookmarks' || currentView === 'quiz') && savedPhrases.length" class="nav-btn quiz-nav-btn" :class="{ active: currentView === 'quiz' }" @click="currentView = currentView === 'quiz' ? 'bookmarks' : 'quiz'; quizPhase = 'setup'" aria-label="Quiz">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="12" r="10"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        </button>
-        <button v-if="currentView === 'bookmarks' && savedPhrases.length" class="nav-btn clear-btn" @click="showClearConfirm = 'bookmarks'" aria-label="Clear bookmarks">
+        <button v-if="currentView === 'bookmarks' && savedPhrases.length" class="nav-btn clear-btn" @click="showClearConfirm = 'bookmarks'" aria-label="Clear bookmarks" title="Clear bookmarks">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </nav>
@@ -439,8 +355,379 @@
       </div>
     </div>
 
+    <!-- ═══════════════════ DESKTOP UI ═══════════════════ -->
     <div v-else class="desktop">
-      <!-- Desktop UI -->
+      <!-- Top Nav -->
+      <nav class="top-nav">
+        <div class="nav-left">
+          <button class="nav-btn" :class="{ active: currentView === 'translate' }" @click="currentView = 'translate'" title="Translate (Alt+T)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span class="nav-label">Translate</span>
+          </button>
+          <button class="nav-btn" :class="{ active: currentView === 'history' }" @click="toggleHistory" title="History (Alt+P)">
+            <svg width="20" height="20" viewBox="0 0 24 24" :fill="currentView === 'history' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="nav-label">History</span>
+          </button>
+          <button class="nav-btn" :class="{ active: currentView === 'bookmarks' }" @click="toggleBookmarks" title="Bookmarks (Alt+B)">
+            <svg width="20" height="20" viewBox="0 0 24 24" :fill="currentView === 'bookmarks' ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            <span class="nav-label">Bookmarks</span>
+          </button>
+          <button class="nav-btn" :class="{ loading: isLoadingContext, active: currentView === 'context' }" @click="fetchContext" :disabled="isLoadingContext" title="Context / Info (Alt+I)">
+            <svg v-if="!isLoadingContext" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span v-else class="spinner sm"></span>
+            <span class="nav-label">Context</span>
+          </button>
+        </div>
+        <div class="nav-right">
+          <button v-if="currentView === 'translate'" class="nav-btn" @click="toggleTranslationApi" :title="`Engine: ${translationApi === 'deepl' ? 'DeepL' : 'Google Translate'} (Alt+E)`">
+            <span class="api-label">{{ translationApi === 'deepl' ? 'DL' : 'GT' }}</span>
+          </button>
+          <button v-if="currentView === 'translate'" class="nav-btn" @click="savePhrase" title="Save phrase (Alt+S)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </button>
+          <button v-if="currentView === 'translate'" class="nav-btn" :class="{ copied: copiedAll }" @click="copyAll" title="Copy all (Alt+Shift+C)">
+            <svg v-if="!copiedAll" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+          <button v-if="currentView === 'translate'" class="nav-btn add-lang-btn" @click="showModal = true" title="Add language (Alt+N)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button v-if="currentView === 'history'" class="nav-btn" @click="exportHistoryCsv" title="eXport CSV (Alt+X)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button v-if="currentView === 'history' && history.length" class="nav-btn" @click="showClearConfirm = 'history'" title="Wipe history (Alt+W)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+          <button v-if="currentView === 'bookmarks'" class="nav-btn" @click="exportBookmarksCsv" title="eXport CSV (Alt+X)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          <button v-if="currentView === 'bookmarks' && savedPhrases.length" class="nav-btn" @click="showClearConfirm = 'bookmarks'" title="Wipe bookmarks (Alt+W)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+          <button class="nav-btn help-btn" @click="showHelp = !showHelp" title="Keyboard shortcuts">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><line x1="6" y1="10" x2="6" y2="10.01" /><line x1="10" y1="10" x2="10" y2="10.01" /><line x1="14" y1="10" x2="14" y2="10.01" /><line x1="18" y1="10" x2="18" y2="10.01" /><line x1="8" y1="14" x2="16" y2="14" /></svg>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Help Popup -->
+      <div v-if="showHelp" class="help-overlay" @click.self="showHelp = false">
+        <div class="help-popup">
+          <div class="help-header">
+            <h3>Keyboard Shortcuts</h3>
+            <button class="close-btn" @click="showHelp = false">✕</button>
+          </div>
+          <div class="help-content">
+            <div class="help-section">
+              <h4>Navigation</h4>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>T</kbd><span>Translate tab</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>P</kbd><span>Previous translations (History)</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>B</kbd><span>Bookmarks tab</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>I</kbd><span>Info / Context tab</span></div>
+            </div>
+            <div class="help-section">
+              <h4>Translation View</h4>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>←↑↓→</kbd> / <kbd>HJKL</kbd><span>Navigate between boxes</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>←↑↓→</kbd> / <kbd>HJKL</kbd><span>Move / reorder boxes</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>N</kbd><span>New language (add)</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>D</kbd><span>Delete focused box</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>C</kbd><span>Copy focused box text</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd><span>Copy all boxes</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>S</kbd><span>Save current translations</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>E</kbd><span>Engine toggle (GT/DL)</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>A</kbd><span>Audio playback (TTS)</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>O</kbd><span>Origin — set source language</span></div>
+            </div>
+            <div class="help-section">
+              <h4>History &amp; Bookmarks</h4>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>←↑↓→</kbd> / <kbd>HJKL</kbd><span>Navigate rows &amp; columns</span></div>
+              <div class="shortcut-row"><kbd>Enter</kbd><span>Restore selected translation</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>R</kbd><span>Remove selected row</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>X</kbd><span>eXport data (CSV)</span></div>
+              <div class="shortcut-row"><kbd>Alt</kbd>+<kbd>W</kbd><span>Wipe (clear all)</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Translate View -->
+      <template v-if="currentView === 'translate'">
+        <div class="desktop-grid-wrapper">
+          <div class="desktop-lang-grid">
+            <div
+              v-for="(lang, idx) in reversedLanguages"
+              :key="lang.language"
+              class="lang-card"
+              :class="{
+                focused: focusedLangIdx === idx,
+                'drag-over': dragOverLang === lang.language,
+                'dragging': draggingLang === lang.language,
+              }"
+              :data-lang="lang.language"
+              @click="setFocusedLang(idx)"
+              @dragover.prevent="dragOverLang = lang.language"
+              @dragleave="dragOverLang = null"
+              @drop="onDrop(lang.language)"
+            >
+              <div class="lang-name">
+                <span
+                  class="lang-name-text"
+                  draggable="true"
+                  @dragstart="onDragStart(lang.language, $event)"
+                  @dragend="onDragEnd"
+                >{{ lang.language === 'auto' ? (detectedLangCode ? `Detected: ${getLanguageName(detectedLangCode)}` : 'Detect Language') : lang.name }}</span>
+                <span class="lang-actions">
+                  <button
+                    v-if="langTexts[lang.language]?.trim()"
+                    class="copy-btn"
+                    :class="{ copied: copiedLang === lang.language }"
+                    @click.stop="copyText(lang.language)"
+                    title="Copy text (Alt+C)"
+                  >
+                    <svg v-if="copiedLang !== lang.language" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button
+                    v-if="lang.language !== 'auto' && langTexts[lang.language]?.trim() && TTS_SUPPORTED_LANGUAGES.has(lang.language)"
+                    class="tts-btn"
+                    :class="{ playing: ttsPlaying === lang.language, loading: ttsLoading === lang.language }"
+                    :disabled="ttsLoading === lang.language"
+                    @click.stop="playTts(lang.language)"
+                    title="Play audio (Alt+A)"
+                  >
+                    <span v-if="ttsLoading === lang.language" class="tts-spinner"></span>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  </button>
+                  <button
+                    v-if="savedSource?.code !== lang.language"
+                    class="source-btn"
+                    @click.stop="setSourceAndRetranslate(lang.language)"
+                    title="Set as source language (Alt+O)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                  </button>
+                  <span v-else class="source-indicator">●</span>
+                  <button class="remove-btn" @click="removeLanguage(lang.language)" title="Remove language (Alt+D)">✕</button>
+                </span>
+              </div>
+              <div class="textarea-wrapper">
+                <textarea
+                  v-if="canTranslatePair(savedSource?.code === 'auto' ? (detectedLangCode || 'auto') : (savedSource?.code ?? 'en'), lang.language)"
+                  :ref="(el: any) => { if (el) langTextareaRefs[idx] = el }"
+                  :value="langTexts[lang.language] ?? ''"
+                  class="lang-textarea"
+                  :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
+                  :placeholder="`Type in ${lang.name}...`"
+                  @input="onLangInput(lang.language, ($event.target as HTMLTextAreaElement).value)"
+                  @focus="focusedLangIdx = idx"
+                />
+                <div v-else class="translate-error">
+                  Cannot translate from {{ getLanguageName(savedSource?.code === 'auto' ? (detectedLangCode || 'auto') : (savedSource?.code ?? 'en')) }} to {{ lang.name }}
+                </div>
+                <div v-if="romanizations[lang.language] && NON_LATIN_LANGUAGES.has(lang.language)" class="romanization">
+                  {{ romanizations[lang.language] }}
+                </div>
+                <div class="textarea-footer">
+                  <span class="char-count">{{ (langTexts[lang.language] ?? '').length }}c · {{ wordCount(langTexts[lang.language] ?? '') }}w</span>
+                  <span class="engine-badges">
+                    <span v-if="langSupportMap.get(lang.language)?.gt" class="engine-badge gt" :class="{ active: getActiveEngine(lang.language) === 'gt' }">GT</span>
+                    <span v-if="langSupportMap.get(lang.language)?.dl" class="engine-badge dl" :class="{ active: getActiveEngine(lang.language) === 'dl' }">DL</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Desktop History View -->
+      <template v-if="currentView === 'history'">
+        <div class="desktop-list-view">
+          <div class="list-search-bar">
+            <input v-model="historySearch" type="text" placeholder="Search history..." class="search-input" />
+          </div>
+          <div v-if="!filteredHistory.length" class="bookmarks-empty">
+            {{ history.length ? 'No matching history.' : 'No translation history yet.' }}
+          </div>
+          <div v-else class="bookmarks-table-wrapper">
+            <table class="bookmarks-table">
+              <thead>
+                <tr>
+                  <th
+                    v-for="(lang, colIdx) in displayLanguages"
+                    :key="lang.language"
+                    :class="{ 'col-highlight': tableColIdx === colIdx }"
+                  >{{ lang.name }}</th>
+                  <th class="action-col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(entry, idx) in filteredHistory"
+                  :key="idx"
+                  class="history-row"
+                  :class="{ 'row-highlight': tableRowIdx === idx }"
+                  @click="restoreFromHistory(entry)"
+                >
+                  <td
+                    v-for="(lang, colIdx) in displayLanguages"
+                    :key="lang.language"
+                    :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
+                    :class="{ 'cell-highlight': tableRowIdx === idx && tableColIdx === colIdx }"
+                  >
+                    <template v-if="lang.language === entry.sourceLang">
+                      {{ entry.sourceText }}
+                    </template>
+                    <template v-else>
+                      {{ entry.translations[lang.language] ?? '' }}
+                    </template>
+                  </td>
+                  <td class="action-col" @click.stop>
+                    <button class="delete-btn" @click="deleteHistoryEntry(history.indexOf(entry))" title="Delete entry (Alt+R)">🗑</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- Desktop Bookmarks View -->
+      <template v-if="currentView === 'bookmarks'">
+        <div class="desktop-list-view">
+          <div class="list-search-bar">
+            <input v-model="bookmarksSearch" type="text" placeholder="Search saved phrases..." class="search-input" />
+          </div>
+          <div v-if="!filteredBookmarks.length" class="bookmarks-empty">
+            {{ savedPhrases.length ? 'No matching phrases.' : 'No saved phrases yet.' }}
+          </div>
+          <div v-else class="bookmarks-table-wrapper">
+            <table class="bookmarks-table">
+              <thead>
+                <tr>
+                  <th
+                    v-for="(lang, colIdx) in displayLanguages"
+                    :key="lang.language"
+                    :class="{ 'col-highlight': tableColIdx === colIdx }"
+                  >{{ lang.name }}</th>
+                  <th class="action-col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(phrase, idx) in filteredBookmarks"
+                  :key="idx"
+                  class="history-row"
+                  :class="{ 'row-highlight': tableRowIdx === idx }"
+                  @click="restoreFromHistory(phrase)"
+                >
+                  <td
+                    v-for="(lang, colIdx) in displayLanguages"
+                    :key="lang.language"
+                    :dir="RTL_LANGUAGES.has(lang.language) ? 'rtl' : 'ltr'"
+                    :class="{ 'cell-highlight': tableRowIdx === idx && tableColIdx === colIdx }"
+                  >
+                    <template v-if="lang.language === phrase.sourceLang">
+                      {{ phrase.sourceText }}
+                    </template>
+                    <template v-else>
+                      {{ phrase.translations[lang.language] ?? '...' }}
+                    </template>
+                    <div class="srs-bar" v-if="lang.language !== phrase.sourceLang && phrase.translations[lang.language]">
+                      <div class="srs-bar-fill" :style="{ width: `${getSrsMastery(phrase.sourceLang, lang.language, phrase.sourceText) * 100}%` }" />
+                    </div>
+                  </td>
+                  <td class="action-col" @click.stop>
+                    <button class="delete-btn" @click="deletePhrase(savedPhrases.indexOf(phrase))" title="Delete phrase (Alt+R)">🗑</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- Desktop Context View -->
+      <template v-if="currentView === 'context'">
+        <div v-if="!contextData || !Object.keys(contextData).length" class="desktop-list-view">
+          <div class="bookmarks-empty">No context loaded yet.</div>
+        </div>
+        <div v-else class="desktop-grid-wrapper">
+          <div class="desktop-lang-grid context-grid">
+            <div
+              v-for="lang in contextLanguages"
+              :key="lang"
+              class="lang-card"
+              :dir="RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr'"
+            >
+              <div class="lang-name">
+                <span class="lang-name-text">{{ getLanguageName(lang) }}</span>
+              </div>
+              <div class="context-content">
+                <div class="context-section">
+                  <div class="context-label">{{ contextLabels[lang]?.definitions ?? 'Definitions' }}</div>
+                  <ul class="context-list">
+                    <li v-for="(d, i) in (contextData[lang]?.definitions ?? [])" :key="i">{{ d }}</li>
+                  </ul>
+                </div>
+                <div class="context-section">
+                  <div class="context-label">{{ contextLabels[lang]?.examples ?? 'Examples' }}</div>
+                  <ul class="context-list">
+                    <li v-for="(ex, i) in (contextData[lang]?.examples ?? [])" :key="i">{{ ex }}</li>
+                  </ul>
+                </div>
+                <div class="context-section">
+                  <div class="context-label">{{ contextLabels[lang]?.synonyms ?? 'Synonyms' }}</div>
+                  <div class="context-synonyms">
+                    <span v-for="(s, i) in (contextData[lang]?.synonyms ?? [])" :key="i" class="context-synonym">{{ s }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Shared modals -->
+      <div v-if="showClearConfirm" class="confirm-overlay" @click.self="closeClearConfirm">
+        <div class="confirm-modal">
+          <p>Clear all {{ showClearConfirm === 'history' ? 'history' : 'saved phrases' }}?</p>
+          <div class="confirm-actions">
+            <button class="confirm-cancel" @click="closeClearConfirm">Cancel</button>
+            <button class="confirm-delete" @click="confirmClear">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showModal" class="modal-overlay desktop-modal-overlay" @click.self="closeModal">
+        <div class="modal desktop-modal">
+          <div class="modal-header">
+            <input
+              ref="searchInput"
+              v-model="search"
+              type="text"
+              placeholder="Search languages..."
+              class="search-input"
+            />
+            <button class="close-btn" @click="closeModal">✕</button>
+          </div>
+          <ul class="language-list" role="listbox">
+            <li
+              v-for="lang in filteredLanguages"
+              :key="lang.language"
+              role="option"
+              class="language-item"
+              @click="selectLanguage(lang)"
+            >
+              <span class="language-item-name">{{ lang.name }} ({{ lang.language }})</span>
+              <span class="language-item-badges">
+                <span v-if="(lang as any).gt" class="lang-badge gt">GT</span>
+                <span v-if="(lang as any).dl" class="lang-badge dl">DL</span>
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -453,7 +740,16 @@ const RTL_LANGUAGES = new Set(['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', '
 
 const { isMobile } = useDevice()
 
-const currentView = ref<'translate' | 'bookmarks' | 'history' | 'context' | 'quiz'>('translate')
+const currentView = ref<'translate' | 'bookmarks' | 'history' | 'context'>('translate')
+
+// Desktop focus management
+const focusedLangIdx = ref(0)
+const langTextareaRefs = ref<Record<number, HTMLTextAreaElement>>({})
+const showHelp = ref(false)
+
+// Table navigation for history/bookmarks views
+const tableRowIdx = ref(0)
+const tableColIdx = ref(0)
 
 const DETECT_LANG = { language: 'auto', name: 'Detect Language', gt: true, dl: true }
 
@@ -508,7 +804,12 @@ async function fetchRomanizations() {
   const entries = Object.entries(langTexts).filter(
     ([code, text]) => text?.trim() && NON_LATIN_LANGUAGES.has(code)
   )
-  for (const [code, text] of entries) {
+  // Clear stale romanizations for languages with no text
+  for (const code of Object.keys(romanizations)) {
+    if (!langTexts[code]?.trim()) delete romanizations[code]
+  }
+  // Fetch all in parallel for faster updates
+  await Promise.all(entries.map(async ([code, text]) => {
     try {
       const res = await $fetch<{ romanized: string }>('/api/romanize', {
         method: 'POST',
@@ -519,7 +820,7 @@ async function fetchRomanizations() {
     } catch {
       // silently fail
     }
-  }
+  }))
 }
 
 function wordCount(text: string): number {
@@ -1027,6 +1328,11 @@ async function selectLanguage(lang: { language: string; name: string; gt: boolea
       })
       if (result.translations[lang.language]) {
         langTexts[lang.language] = result.translations[lang.language]!
+        // Fetch romanization for new language if non-Latin
+        if (NON_LATIN_LANGUAGES.has(lang.language)) {
+          if (romanizeTimer) clearTimeout(romanizeTimer)
+          romanizeTimer = setTimeout(fetchRomanizations, 300)
+        }
       }
     } catch (e) {
       console.error('Translation for new language failed', e)
@@ -1098,6 +1404,217 @@ watch(showModal, (val) => {
   }
 })
 
+// ── Desktop focus helpers ──
+function setFocusedLang(idx: number) {
+  focusedLangIdx.value = idx
+  nextTick(() => {
+    const ta = langTextareaRefs.value[idx]
+    if (ta) {
+      ta.focus()
+      // Place cursor at end of text
+      const len = ta.value.length
+      ta.setSelectionRange(len, len)
+    }
+  })
+}
+
+// Desktop grid columns (3 cols default)
+const DESKTOP_COLS = 3
+
+function navigateLangGrid(direction: 'left' | 'right' | 'up' | 'down') {
+  const total = reversedLanguages.value.length
+  if (!total) return
+  let idx = focusedLangIdx.value
+  const cols = DESKTOP_COLS
+  switch (direction) {
+    case 'left':
+      idx = idx > 0 ? idx - 1 : total - 1
+      break
+    case 'right':
+      idx = idx < total - 1 ? idx + 1 : 0
+      break
+    case 'up':
+      idx = idx - cols >= 0 ? idx - cols : idx
+      break
+    case 'down':
+      idx = idx + cols < total ? idx + cols : idx
+      break
+  }
+  setFocusedLang(idx)
+}
+
+function moveLangInGrid(direction: 'left' | 'right' | 'up' | 'down') {
+  const arr = selectedLanguages.value
+  const reversed = [...arr].reverse()
+  const total = reversed.length
+  if (!total) return
+  const idx = focusedLangIdx.value
+  const cols = DESKTOP_COLS
+  let targetIdx = idx
+  switch (direction) {
+    case 'left': targetIdx = idx > 0 ? idx - 1 : idx; break
+    case 'right': targetIdx = idx < total - 1 ? idx + 1 : idx; break
+    case 'up': targetIdx = idx - cols >= 0 ? idx - cols : idx; break
+    case 'down': targetIdx = idx + cols < total ? idx + cols : idx; break
+  }
+  if (targetIdx === idx) return
+  // Convert reversed indices to original array indices
+  const srcOrigIdx = arr.length - 1 - idx
+  const tgtOrigIdx = arr.length - 1 - targetIdx
+  const [moved] = arr.splice(srcOrigIdx, 1)
+  arr.splice(tgtOrigIdx, 0, moved!)
+  focusedLangIdx.value = targetIdx
+}
+
+function navigateTable(direction: 'left' | 'right' | 'up' | 'down') {
+  const entries = currentView.value === 'history' ? filteredHistory.value : filteredBookmarks.value
+  const cols = displayLanguages.value.length
+  if (!entries.length || !cols) return
+  switch (direction) {
+    case 'left':
+      tableColIdx.value = Math.max(0, tableColIdx.value - 1)
+      break
+    case 'right':
+      tableColIdx.value = Math.min(cols - 1, tableColIdx.value + 1)
+      break
+    case 'up':
+      tableRowIdx.value = Math.max(0, tableRowIdx.value - 1)
+      break
+    case 'down':
+      tableRowIdx.value = Math.min(entries.length - 1, tableRowIdx.value + 1)
+      break
+  }
+}
+
+// Reset table indices when switching views
+watch(currentView, () => {
+  tableRowIdx.value = 0
+  tableColIdx.value = 0
+})
+
+// ── Keyboard shortcuts ──
+function handleKeyboardShortcut(e: KeyboardEvent) {
+  // Don't intercept if modal is open
+  if (showModal.value || showClearConfirm.value || showHelp.value) return
+  if (!e.altKey) return
+
+  const key = e.key.toLowerCase()
+  const shift = e.shiftKey
+
+  // Direction mapping for vim keys
+  const dirMap: Record<string, 'left' | 'right' | 'up' | 'down'> = {
+    arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down',
+    h: 'left', l: 'right', k: 'up', j: 'down',
+  }
+  const dir = dirMap[key]
+
+  // Tab navigation
+  if (key === 't') { e.preventDefault(); currentView.value = 'translate'; return }
+  if (key === 'b') { e.preventDefault(); currentView.value = 'bookmarks'; return }
+  if (key === 'p') { e.preventDefault(); currentView.value = 'history'; return }
+  if (key === 'i') { e.preventDefault(); fetchContext(); return }
+
+  // Translate view shortcuts
+  if (currentView.value === 'translate') {
+    if (dir) {
+      e.preventDefault()
+      if (shift) {
+        moveLangInGrid(dir)
+      } else {
+        navigateLangGrid(dir)
+      }
+      return
+    }
+    if (key === 'n') { e.preventDefault(); showModal.value = true; return }
+    if (key === 'd') {
+      e.preventDefault()
+      const lang = reversedLanguages.value[focusedLangIdx.value]
+      if (lang) removeLanguage(lang.language)
+      if (focusedLangIdx.value >= reversedLanguages.value.length) {
+        focusedLangIdx.value = Math.max(0, reversedLanguages.value.length - 1)
+      }
+      return
+    }
+    if (key === 'c' && shift) { e.preventDefault(); copyAll(); return }
+    if (key === 'c' && !shift) {
+      e.preventDefault()
+      const lang = reversedLanguages.value[focusedLangIdx.value]
+      if (lang) copyText(lang.language)
+      return
+    }
+    if (key === 's') { e.preventDefault(); savePhrase(); return }
+    if (key === 'e') { e.preventDefault(); toggleTranslationApi(); return }
+    if (key === 'a') {
+      e.preventDefault()
+      const lang = reversedLanguages.value[focusedLangIdx.value]
+      if (lang) playTts(lang.language)
+      return
+    }
+    if (key === 'o') {
+      e.preventDefault()
+      const lang = reversedLanguages.value[focusedLangIdx.value]
+      if (lang) setSourceAndRetranslate(lang.language)
+      return
+    }
+  }
+
+  // History & Bookmarks shortcuts
+  if (currentView.value === 'history' || currentView.value === 'bookmarks') {
+    if (dir) {
+      e.preventDefault()
+      navigateTable(dir)
+      return
+    }
+    if (key === 'r') {
+      e.preventDefault()
+      const entries = currentView.value === 'history' ? filteredHistory.value : filteredBookmarks.value
+      if (entries.length && tableRowIdx.value < entries.length) {
+        const entry = entries[tableRowIdx.value]
+        if (currentView.value === 'history') {
+          const realIdx = history.value.indexOf(entry!)
+          if (realIdx !== -1) deleteHistoryEntry(realIdx)
+        } else {
+          const realIdx = savedPhrases.value.indexOf(entry!)
+          if (realIdx !== -1) deletePhrase(realIdx)
+        }
+        // Adjust index
+        const newLen = (currentView.value === 'history' ? filteredHistory.value : filteredBookmarks.value).length
+        if (tableRowIdx.value >= newLen) tableRowIdx.value = Math.max(0, newLen - 1)
+      }
+      return
+    }
+    if (key === 'x') {
+      e.preventDefault()
+      if (currentView.value === 'history') exportHistoryCsv()
+      else exportBookmarksCsv()
+      return
+    }
+    if (key === 'w') {
+      e.preventDefault()
+      showClearConfirm.value = currentView.value === 'history' ? 'history' : 'bookmarks'
+      return
+    }
+    if (key === 'enter' || e.key === 'Enter') {
+      e.preventDefault()
+      const entries = currentView.value === 'history' ? filteredHistory.value : filteredBookmarks.value
+      if (entries.length && tableRowIdx.value < entries.length) {
+        restoreFromHistory(entries[tableRowIdx.value]!)
+      }
+      return
+    }
+  }
+}
+
+if (!import.meta.server) {
+  onMounted(() => {
+    window.addEventListener('keydown', handleKeyboardShortcut)
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeyboardShortcut)
+  })
+}
+
 onMounted(async () => {
   savedPhrases.value = loadSavedPhrases()
   history.value = loadHistory()
@@ -1162,6 +1679,9 @@ onMounted(async () => {
     if (Object.keys(newTranslations).length) {
       persistTranslationsCache(src.code, src.text, { ...cache.translations, ...newTranslations })
     }
+    // Fetch romanizations for cached translations
+    if (romanizeTimer) clearTimeout(romanizeTimer)
+    romanizeTimer = setTimeout(fetchRomanizations, 300)
     return
   }
 
@@ -1201,6 +1721,9 @@ onMounted(async () => {
   } catch (e) {
     console.error('Initial translation failed', e)
   }
+  // Fetch romanizations for initial translations
+  if (romanizeTimer) clearTimeout(romanizeTimer)
+  romanizeTimer = setTimeout(fetchRomanizations, 300)
 })
 
 // Saved phrases (localStorage)
@@ -1633,176 +2156,6 @@ function getSrsMastery(from: string, to: string, text: string): number {
   const card = getSrsCard(srsKey(from, to, text))
   // Mastery: 0-1 based on reps. 5 reps = mastered
   return Math.min(1, card.reps / 5)
-}
-
-// Quiz state
-const quizPhase = ref<'setup' | 'active' | 'results'>('setup')
-const quizFromLang = ref('')
-const quizToLang = ref('')
-const quizTermCount = ref(10)
-const quizIncludePhrases = ref(false)
-const quizAnswer = ref('')
-const quizShowResult = ref(false)
-const quizResultClass = ref('')
-const quizResultLabel = ref('')
-const quizAccentNote = ref('')
-const quizCurrentIdx = ref(0)
-const quizCorrectCount = ref(0)
-const quizAnswerInput = ref<HTMLInputElement | null>(null)
-
-interface QuizItem {
-  prompt: string
-  answer: string
-  srsKey: string
-  wasCorrect: boolean
-  wasSkipped: boolean
-  userAnswer: string
-}
-
-const quizItems = ref<QuizItem[]>([])
-
-// Languages available for quizzing (only those present in saved phrases)
-const quizAvailableLangs = computed(() => {
-  const codes = new Set<string>()
-  for (const phrase of savedPhrases.value) {
-    codes.add(phrase.sourceLang)
-    for (const code of Object.keys(phrase.translations)) {
-      codes.add(code)
-    }
-  }
-  return [...codes].sort((a, b) => getLanguageName(a).localeCompare(getLanguageName(b)))
-})
-
-watch(quizAvailableLangs, (langs) => {
-  if (langs.length >= 2) {
-    if (!quizFromLang.value || !langs.includes(quizFromLang.value)) quizFromLang.value = langs[0]!
-    if (!quizToLang.value || !langs.includes(quizToLang.value)) quizToLang.value = langs[1] ?? langs[0]!
-  }
-}, { immediate: true })
-
-function isPhrase(text: string): boolean {
-  // A "phrase" has multiple clauses/sentences or is very long
-  // "Multiple worded vocabulary" (e.g. "ice cream") is NOT a phrase
-  return text.includes('.') || text.includes('!') || text.includes('?') || text.includes(',') || text.length > 60
-}
-
-function normalizeForCompare(text: string): string {
-  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-}
-
-function startQuiz() {
-  if (quizFromLang.value === quizToLang.value) return
-  const from = quizFromLang.value
-  const to = quizToLang.value
-  const now = Date.now()
-
-  // Build all possible items from saved phrases
-  const candidates: { prompt: string; answer: string; srsKey: string; dueAt: number }[] = []
-  for (const phrase of savedPhrases.value) {
-    let fromText = ''
-    let toText = ''
-    if (phrase.sourceLang === from) fromText = phrase.sourceText
-    else if (phrase.translations[from]) fromText = phrase.translations[from]!
-    if (phrase.sourceLang === to) toText = phrase.sourceText
-    else if (phrase.translations[to]) toText = phrase.translations[to]!
-
-    if (!fromText?.trim() || !toText?.trim()) continue
-    if (!quizIncludePhrases.value && isPhrase(fromText)) continue
-
-    const key = srsKey(from, to, fromText)
-    const card = getSrsCard(key)
-    candidates.push({ prompt: fromText, answer: toText, srsKey: key, dueAt: card.dueAt })
-  }
-
-  // Sort by SRS: due items first (overdue = earliest dueAt), then new items (dueAt=0)
-  candidates.sort((a, b) => {
-    const aOverdue = a.dueAt <= now ? 0 : 1
-    const bOverdue = b.dueAt <= now ? 0 : 1
-    if (aOverdue !== bOverdue) return aOverdue - bOverdue
-    return a.dueAt - b.dueAt
-  })
-
-  const selected = candidates.slice(0, quizTermCount.value)
-  // Shuffle the selected items
-  for (let i = selected.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[selected[i], selected[j]] = [selected[j]!, selected[i]!]
-  }
-
-  quizItems.value = selected.map(c => ({
-    prompt: c.prompt,
-    answer: c.answer,
-    srsKey: c.srsKey,
-    wasCorrect: false,
-    wasSkipped: false,
-    userAnswer: '',
-  }))
-
-  quizCurrentIdx.value = 0
-  quizCorrectCount.value = 0
-  quizAnswer.value = ''
-  quizShowResult.value = false
-  quizPhase.value = quizItems.value.length ? 'active' : 'setup'
-  nextTick(() => quizAnswerInput.value?.focus())
-}
-
-function submitQuizAnswer() {
-  if (quizShowResult.value) return
-  const item = quizItems.value[quizCurrentIdx.value]
-  if (!item) return
-
-  item.userAnswer = quizAnswer.value.trim()
-  const normalizedUser = normalizeForCompare(item.userAnswer)
-  const normalizedAnswer = normalizeForCompare(item.answer)
-
-  if (normalizedUser === normalizedAnswer) {
-    // Check if accents differ
-    const userLower = item.userAnswer.toLowerCase().trim()
-    const answerLower = item.answer.toLowerCase().trim()
-    if (userLower !== answerLower) {
-      quizResultClass.value = 'accent-warn'
-      quizResultLabel.value = 'Correct! But check the accents:'
-      quizAccentNote.value = `You typed: ${item.userAnswer}`
-    } else {
-      quizResultClass.value = 'correct'
-      quizResultLabel.value = 'Correct!'
-      quizAccentNote.value = ''
-    }
-    item.wasCorrect = true
-    quizCorrectCount.value++
-    updateSrs(item.srsKey, true)
-  } else {
-    quizResultClass.value = 'wrong'
-    quizResultLabel.value = 'Incorrect'
-    quizAccentNote.value = ''
-    item.wasCorrect = false
-    updateSrs(item.srsKey, false)
-  }
-
-  quizShowResult.value = true
-}
-
-function skipQuizItem() {
-  const item = quizItems.value[quizCurrentIdx.value]
-  if (item) {
-    item.wasSkipped = true
-    item.userAnswer = ''
-  }
-  quizShowResult.value = true
-  quizResultClass.value = 'skipped'
-  quizResultLabel.value = 'Skipped'
-  quizAccentNote.value = ''
-}
-
-function nextQuizItem() {
-  if (quizCurrentIdx.value < quizItems.value.length - 1) {
-    quizCurrentIdx.value++
-    quizAnswer.value = ''
-    quizShowResult.value = false
-    nextTick(() => quizAnswerInput.value?.focus())
-  } else {
-    quizPhase.value = 'results'
-  }
 }
 
 // CSV export
@@ -2567,12 +2920,6 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Quiz nav button */
-.quiz-nav-btn {
-  position: absolute;
-  left: 100px;
-}
-
 /* SRS progress bars on saved phrases */
 .srs-bar {
   height: 3px;
@@ -2589,322 +2936,237 @@ html, body {
   transition: width 0.3s;
 }
 
-/* Quiz view */
-.quiz-view {
-  flex: 1;
+/* ═══════════════════ DESKTOP STYLES ═══════════════════ */
+.desktop {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-.quiz-setup {
-  flex: 1;
+/* Top Nav */
+.top-nav {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 24px;
-}
-
-.quiz-title {
-  font-size: 22px;
-  font-weight: 700;
-  margin: 0 0 8px;
-}
-
-.quiz-field {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  max-width: 300px;
-}
-
-.quiz-field label {
-  font-size: 14px;
-  font-weight: 600;
-  min-width: 60px;
-}
-
-.quiz-select {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  font-family: inherit;
-}
-
-.quiz-toggle-field {
   justify-content: space-between;
+  align-items: center;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
-.quiz-toggle {
-  width: 44px;
-  height: 24px;
-  border-radius: 12px;
-  border: none;
-  background: var(--border);
-  cursor: pointer;
-  position: relative;
-  transition: background 0.2s;
-  padding: 0;
-}
-
-.quiz-toggle.on {
-  background: var(--accent);
-}
-
-.quiz-toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s;
-}
-
-.quiz-toggle.on .quiz-toggle-knob {
-  transform: translateX(20px);
-}
-
-.quiz-start-btn {
-  margin-top: 12px;
-  padding: 12px 32px;
-  border-radius: 10px;
-  border: none;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.quiz-start-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.quiz-active {
-  flex: 1;
+.nav-left, .nav-right {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.desktop .nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  height: 36px;
+}
+
+.desktop .nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.desktop .nav-btn.active {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.desktop .nav-btn.copied {
+  color: var(--accent);
+}
+
+.nav-label {
+  font-weight: 500;
+}
+
+.help-btn {
+  margin-left: 8px;
+}
+
+.add-lang-btn {
+  border: 1px solid var(--border) !important;
+}
+
+/* Help Popup */
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 24px;
 }
 
-.quiz-progress-bar {
-  width: 100%;
-  max-width: 300px;
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.quiz-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s;
-}
-
-.quiz-counter {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.quiz-prompt {
-  font-size: 28px;
-  font-weight: 700;
-  text-align: center;
-  word-break: break-word;
-}
-
-.quiz-input {
-  width: 100%;
-  max-width: 300px;
-  padding: 12px 16px;
-  border: 2px solid var(--border);
-  border-radius: 10px;
+.help-popup {
   background: var(--bg);
-  color: var(--text);
-  font-size: 18px;
-  font-family: inherit;
-  text-align: center;
-  outline: none;
-}
-
-.quiz-input:focus {
-  border-color: var(--accent);
-}
-
-.quiz-result {
-  text-align: center;
-  padding: 12px;
-  border-radius: 10px;
-  width: 100%;
-  max-width: 300px;
-}
-
-.quiz-result.correct {
-  background: rgba(76, 175, 80, 0.15);
-  color: #4caf50;
-}
-
-.quiz-result.wrong {
-  background: rgba(244, 67, 54, 0.15);
-  color: #f44336;
-}
-
-.quiz-result.accent-warn {
-  background: rgba(255, 152, 0, 0.15);
-  color: #ff9800;
-}
-
-.quiz-result.skipped {
-  background: rgba(158, 158, 158, 0.15);
-  color: var(--text-muted);
-}
-
-.quiz-result-label {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.quiz-accent-note {
-  font-size: 13px;
-  opacity: 0.8;
-  margin-bottom: 4px;
-}
-
-.quiz-correct-answer {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.quiz-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.quiz-submit-btn {
-  padding: 10px 28px;
-  border-radius: 10px;
-  border: none;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.quiz-skip-btn {
-  padding: 10px 28px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text);
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.quiz-results {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24px;
-  gap: 12px;
+  border-radius: 14px;
+  padding: 0;
+  max-width: 520px;
+  width: 90%;
+  max-height: 80vh;
   overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
 
-.quiz-score {
-  font-size: 36px;
-  font-weight: 800;
+.help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-light);
 }
 
-.quiz-score-pct {
-  font-size: 16px;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+.help-header h3 {
+  margin: 0;
+  font-size: 18px;
 }
 
-.quiz-results-list {
-  width: 100%;
-  max-width: 360px;
+.help-content {
+  padding: 12px 20px 20px;
+}
+
+.help-section {
+  margin-bottom: 16px;
+}
+
+.help-section h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.shortcut-row span {
+  color: var(--text-secondary);
+}
+
+kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* Desktop grid */
+.desktop-grid-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.desktop-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.desktop-lang-grid .lang-card {
+  min-height: 200px;
+}
+
+.desktop-lang-grid .lang-card.focused {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 3px rgba(128, 128, 128, 0.15);
+}
+
+.desktop-lang-grid .lang-textarea {
+  min-height: 120px;
+}
+
+/* Desktop List View */
+.desktop-list-view {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
-.quiz-result-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 8px;
+.desktop-list-view .list-search-bar {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.desktop-list-view .bookmarks-table-wrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.desktop-list-view .bookmarks-table {
   font-size: 14px;
 }
 
-.quiz-result-row.correct {
-  background: rgba(76, 175, 80, 0.1);
+/* Table highlight for keyboard navigation */
+.row-highlight {
+  background: var(--bg-hover) !important;
 }
 
-.quiz-result-row.wrong {
-  background: rgba(244, 67, 54, 0.1);
+.col-highlight {
+  background: rgba(128, 128, 128, 0.08);
 }
 
-.quiz-result-row.skipped {
-  background: rgba(158, 158, 158, 0.08);
+.cell-highlight {
+  background: rgba(128, 128, 128, 0.18) !important;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
-.quiz-result-prompt {
-  font-weight: 600;
-  flex: 1;
-  min-width: 0;
+/* Desktop Modal */
+.desktop-modal-overlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.desktop-modal {
+  max-width: 460px;
+  width: 90%;
+  max-height: 70vh;
+  margin: auto;
+  border-radius: 14px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
 
-.quiz-result-arrow {
-  color: var(--text-muted);
-  flex-shrink: 0;
+/* Spinner small variant */
+.spinner.sm {
+  width: 14px;
+  height: 14px;
+  border-width: 1.5px;
 }
 
-.quiz-result-answer {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Context grid on desktop */
+.context-grid .lang-card {
+  min-height: 240px;
 }
-
-.quiz-result-user {
-  font-size: 12px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.quiz-result-icon {
-  font-weight: 700;
-  flex-shrink: 0;
-  width: 18px;
-  text-align: center;
-}
-
-.quiz-result-row.correct .quiz-result-icon { color: #4caf50; }
-.quiz-result-row.wrong .quiz-result-icon { color: #f44336; }
-.quiz-result-row.skipped .quiz-result-icon { color: var(--text-muted); }
 </style>
 
